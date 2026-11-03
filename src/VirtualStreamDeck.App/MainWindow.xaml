@@ -1,32 +1,32 @@
 <Window x:Class="VirtualStreamDeck.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Virtual Stream Deck"
-        WindowStyle="None"
-        ResizeMode="NoResize"
+        xmlns:local="clr-namespace:VirtualStreamDeck.App"
+        Title="Stream Deck"
+        ResizeMode="CanMinimize"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="Manual"
         ShowActivated="False"
-        ShowInTaskbar="False"
+        ShowInTaskbar="True"
+        ThemeMode="Dark"
         Background="#FF17171A"
-        BorderBrush="#FF2E2E34"
-        BorderThickness="1"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True">
 
     <Window.Resources>
-        <Style x:Key="HeaderButton" TargetType="Button">
-            <Setter Property="Width" Value="26" />
-            <Setter Property="Height" Value="22" />
-            <Setter Property="Foreground" Value="#FF8A8A94" />
+        <Style x:Key="RailButton" TargetType="Button">
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="38" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Foreground" Value="#FF9A9AA4" />
             <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
-            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontSize" Value="16" />
             <Setter Property="Focusable" Value="False" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="8">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -34,28 +34,9 @@
                                 <Setter TargetName="Bd" Property="Background" Value="#FF2C2C33" />
                                 <Setter Property="Foreground" Value="#FFEDEDF2" />
                             </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style x:Key="ProfileButton" TargetType="Button">
-            <Setter Property="Height" Value="22" />
-            <Setter Property="Foreground" Value="#FF9A9AA4" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Focusable" Value="False" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="6,0">
-                            <ContentPresenter VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#FF2C2C33" />
-                                <Setter Property="Foreground" Value="#FFEDEDF2" />
+                            <Trigger Property="Tag" Value="active">
+                                <Setter TargetName="Bd" Property="Background" Value="#FF2A3550" />
+                                <Setter Property="Foreground" Value="#FF8DB4FF" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -64,39 +45,43 @@
         </Style>
     </Window.Resources>
 
-    <DockPanel>
-        <!-- Header: drag to move, settings, hide to tray -->
-        <Grid x:Name="Header"
-              DockPanel.Dock="Top"
-              Height="26"
-              Background="Transparent"
-              Cursor="SizeAll"
-              MouseLeftButtonDown="Header_MouseLeftButtonDown"
-              MouseMove="Header_MouseMove"
-              MouseLeftButtonUp="Header_MouseLeftButtonUp">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,4,0">
-                    <Button Style="{StaticResource HeaderButton}" Content="&#xE713;" ToolTip="Nastavenia" Click="Settings_Click" />
-                    <Button Style="{StaticResource HeaderButton}" Content="&#xE921;" ToolTip="Minimalizovať na panel úloh" Click="Minimize_Click" />
-                    <Button Style="{StaticResource HeaderButton}" Content="&#xE8BB;" ToolTip="Ukončiť Stream Deck" Click="Close_Click" />
-                </StackPanel>
-                <Button x:Name="ProfileButton" DockPanel.Dock="Left" Style="{StaticResource ProfileButton}"
-                        Margin="4,0,0,0" ToolTip="Prepnúť profil" Click="ProfileButton_Click">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="ProfileNameText" Text="Hlavný" MaxWidth="140" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="8" Margin="5,1,0,0"
-                                   VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
-                <TextBlock x:Name="HeaderText"
-                           Margin="6,0,6,0"
-                           VerticalAlignment="Center"
-                           FontSize="10"
-                           FontWeight="SemiBold"
-                           TextTrimming="CharacterEllipsis" />
-            </DockPanel>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!-- The deck -->
+        <Grid Grid.Column="0" VerticalAlignment="Top">
+            <UniformGrid x:Name="DeckGrid" Margin="8" />
+            <Border x:Name="StatusToast"
+                    VerticalAlignment="Bottom"
+                    HorizontalAlignment="Center"
+                    Margin="10"
+                    Padding="12,7"
+                    CornerRadius="8"
+                    Background="#F0242429"
+                    BorderThickness="1"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False">
+                <TextBlock x:Name="StatusText" TextWrapping="Wrap" FontSize="12" MaxWidth="360" />
+            </Border>
         </Grid>
 
-        <UniformGrid x:Name="DeckGrid" Margin="6,0,6,6" />
-    </DockPanel>
+        <!-- Rail: opens the side panel -->
+        <Border Grid.Column="1" Background="#FF1C1C21" BorderBrush="#FF2A2A30" BorderThickness="1,0,1,0">
+            <StackPanel Margin="5,8,5,8">
+                <Button x:Name="ProfilesRailButton" Style="{StaticResource RailButton}" Content="&#xE81E;"
+                        ToolTip="Profily" Click="ProfilesRail_Click" />
+                <Button x:Name="SettingsRailButton" Style="{StaticResource RailButton}" Content="&#xE713;"
+                        ToolTip="Nastavenia" Click="SettingsRail_Click" />
+                <Button x:Name="GuideRailButton" Style="{StaticResource RailButton}" Content="&#xE897;"
+                        ToolTip="Návod" Click="GuideRail_Click" />
+            </StackPanel>
+        </Border>
+
+        <!-- Side panel: settings, profiles, guide -->
+        <local:SettingsPanel x:Name="SidePanel" Grid.Column="2" Width="470" Height="580" Visibility="Collapsed" />
+    </Grid>
 </Window>

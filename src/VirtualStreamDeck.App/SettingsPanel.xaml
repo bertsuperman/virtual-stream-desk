@@ -1,0 +1,307 @@
+<UserControl x:Class="VirtualStreamDeck.App.SettingsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="#FF1C1C21">
+
+    <UserControl.Resources>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Opacity" Value="0.85" />
+        </Style>
+        <Style x:Key="Value" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.6" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style x:Key="GuideTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,16,0,4" />
+        </Style>
+        <Style x:Key="GuideText" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Opacity" Value="0.85" />
+            <Setter Property="LineHeight" Value="20" />
+        </Style>
+    </UserControl.Resources>
+
+    <DockPanel>
+        <!-- Header -->
+        <DockPanel DockPanel.Dock="Top" Margin="16,12,8,10">
+            <Button DockPanel.Dock="Right" Click="Collapse_Click" ToolTip="Zbaliť panel" Padding="8,4"
+                    FontFamily="{StaticResource IconFont}" FontSize="12" Content="&#xE76C;" />
+            <TextBlock x:Name="PanelTitle" Text="Nastavenia" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
+        </DockPanel>
+
+        <!-- Navigation -->
+        <ListBox x:Name="Nav" DockPanel.Dock="Left" Width="132" Margin="8,0,0,12"
+                 BorderThickness="0" Background="Transparent" SelectionChanged="Nav_SelectionChanged">
+            <ListBoxItem Tag="profiles">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE81E;" FontFamily="{StaticResource IconFont}" Margin="0,2,10,0" />
+                    <TextBlock Text="Profily" />
+                </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem Tag="layout">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE80A;" FontFamily="{StaticResource IconFont}" Margin="0,2,10,0" />
+                    <TextBlock Text="Rozloženie" />
+                </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem Tag="general">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" Margin="0,2,10,0" />
+                    <TextBlock Text="Všeobecné" />
+                </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem Tag="phone">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE8EA;" FontFamily="{StaticResource IconFont}" Margin="0,2,10,0" />
+                    <TextBlock Text="Mobil" />
+                </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem Tag="obs">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE714;" FontFamily="{StaticResource IconFont}" Margin="0,2,10,0" />
+                    <TextBlock Text="OBS" />
+                </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem Tag="guide">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE897;" FontFamily="{StaticResource IconFont}" Margin="0,2,10,0" />
+                    <TextBlock Text="Návod" />
+                </StackPanel>
+            </ListBoxItem>
+        </ListBox>
+
+        <!-- Footer -->
+        <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Hint}" Margin="16,0,16,12" FontSize="11"
+                   Text="Kým je panel otvorený, deck sa správa ako bežné okno (dá sa doň písať). Skratky z tlačidiel pôjdu správne do iných appiek, keď panel zbalíš." />
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="4,0,4,8">
+            <Grid Margin="12,0,16,8">
+
+                <!-- ───────────── Profily ───────────── -->
+                <StackPanel x:Name="ProfilesSection">
+                    <TextBlock Text="Profily" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,8"
+                               Text="Klikni na profil a deck sa naň prepne. Každý profil má vlastné tlačidlá a mriežku." />
+                    <ListBox x:Name="ProfileList" MaxHeight="210" Margin="0,0,0,12" SelectionChanged="ProfileList_SelectionChanged" />
+
+                    <TextBlock Text="Názov aktívneho profilu" Margin="0,0,0,6" Opacity="0.85" />
+                    <TextBox x:Name="ProfileNameBox" Margin="0,0,0,12" />
+
+                    <WrapPanel>
+                        <Button Content="Nový profil" Click="ProfileNew_Click" Margin="0,0,8,8" />
+                        <Button Content="Duplikovať" Click="ProfileDuplicate_Click" Margin="0,0,8,8" />
+                        <Button Content="Vymazať" Click="ProfileDelete_Click" Margin="0,0,0,8" />
+                    </WrapPanel>
+                    <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                               Text="Tip: tlačidlo s akciou „Prepnúť profil“ funguje ako priečinok. V cieľovom profile si daj tlačidlo späť." />
+                </StackPanel>
+
+                <!-- ───────────── Rozloženie ───────────── -->
+                <StackPanel x:Name="LayoutSection" Visibility="Collapsed">
+                    <TextBlock x:Name="GridTitle" Style="{StaticResource SectionTitle}" />
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="40" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="40" />
+                            <RowDefinition Height="40" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Riadky" Style="{StaticResource FieldLabel}" />
+                        <Slider Grid.Row="0" Grid.Column="1" x:Name="RowsSlider" Minimum="1" Maximum="10"
+                                TickFrequency="1" IsSnapToTickEnabled="True" VerticalAlignment="Center" />
+                        <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Value}"
+                                   Text="{Binding Value, ElementName=RowsSlider, StringFormat={}{0:0}}" />
+                        <TextBlock Grid.Row="1" Text="Stĺpce" Style="{StaticResource FieldLabel}" />
+                        <Slider Grid.Row="1" Grid.Column="1" x:Name="ColumnsSlider" Minimum="1" Maximum="12"
+                                TickFrequency="1" IsSnapToTickEnabled="True" VerticalAlignment="Center" />
+                        <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Value}"
+                                   Text="{Binding Value, ElementName=ColumnsSlider, StringFormat={}{0:0}}" />
+                    </Grid>
+                    <TextBlock x:Name="HiddenInfo" Style="{StaticResource Hint}" Margin="0,0,0,20" />
+
+                    <TextBlock Text="Vzhľad (všetky profily)" Style="{StaticResource SectionTitle}" />
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="40" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="40" />
+                            <RowDefinition Height="40" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Veľkosť" Style="{StaticResource FieldLabel}" />
+                        <Slider Grid.Row="0" Grid.Column="1" x:Name="SizeSlider" Minimum="40" Maximum="200"
+                                TickFrequency="4" IsSnapToTickEnabled="True" VerticalAlignment="Center" />
+                        <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Value}"
+                                   Text="{Binding Value, ElementName=SizeSlider, StringFormat={}{0:0}}" />
+                        <TextBlock Grid.Row="1" Text="Medzery" Style="{StaticResource FieldLabel}" />
+                        <Slider Grid.Row="1" Grid.Column="1" x:Name="SpacingSlider" Minimum="0" Maximum="40"
+                                TickFrequency="1" IsSnapToTickEnabled="True" VerticalAlignment="Center" />
+                        <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Value}"
+                                   Text="{Binding Value, ElementName=SpacingSlider, StringFormat={}{0:0}}" />
+                    </Grid>
+                    <CheckBox x:Name="LabelsBox" Content="Popisky pod ikonami" />
+                </StackPanel>
+
+                <!-- ───────────── Všeobecné ───────────── -->
+                <StackPanel x:Name="GeneralSection" Visibility="Collapsed">
+                    <TextBlock Text="Všeobecné" Style="{StaticResource SectionTitle}" />
+                    <CheckBox x:Name="TopmostBox" Content="Vždy navrchu" Margin="0,0,0,6" />
+                    <CheckBox x:Name="AutostartBox" Content="Spustiť so systémom Windows" Margin="0,0,0,20" />
+
+                    <TextBlock Text="Konfigurácia" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,8"
+                               Text="Tlačidlá, profily, ikony a nastavenia sú v jednom priečinku. Na zálohu ho stačí skopírovať." />
+                    <Button Content="Otvoriť priečinok s nastaveniami" HorizontalAlignment="Left" Click="OpenFolder_Click" />
+
+                    <TextBlock x:Name="VersionText" Style="{StaticResource Hint}" Margin="0,24,0,0" />
+                </StackPanel>
+
+                <!-- ───────────── Mobil ───────────── -->
+                <StackPanel x:Name="PhoneSection" Visibility="Collapsed">
+                    <TextBlock Text="Ovládanie z mobilu" Style="{StaticResource SectionTitle}" />
+                    <CheckBox x:Name="RemoteEnabledBox" Content="Povoliť ovládanie z mobilu" />
+                    <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,12"
+                               Text="Mobil musí byť v rovnakej Wi-Fi. Nič sa neinštaluje, beží to v prehliadači." />
+
+                    <StackPanel x:Name="RemotePanel">
+                        <Border Width="190" Height="190" Background="White" CornerRadius="10" HorizontalAlignment="Left">
+                            <Image x:Name="QrImage" Margin="6" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                        </Border>
+                        <TextBlock Text="Naskenuj kód fotoaparátom mobilu." FontWeight="SemiBold" Margin="0,10,0,12" />
+
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="Adresa PC" Style="{StaticResource FieldLabel}" />
+                            <ComboBox Grid.Column="1" x:Name="AddressBox" HorizontalAlignment="Stretch" />
+                            <TextBlock Grid.Row="1" Text="Port" Style="{StaticResource FieldLabel}" Margin="0,8,0,0" />
+                            <TextBox Grid.Row="1" Grid.Column="1" x:Name="RemotePortBox" Width="90" HorizontalAlignment="Left" Margin="0,8,0,0" />
+                        </Grid>
+                        <WrapPanel>
+                            <Button Content="Kopírovať odkaz" Click="CopyUrl_Click" Margin="0,0,8,8" />
+                            <Button Content="Nový kód" Click="NewToken_Click" Margin="0,0,0,8"
+                                    ToolTip="Vytvorí nový QR kód. Zariadenia so starým kódom sa odpoja." />
+                        </WrapPanel>
+                        <TextBox x:Name="UrlBox" IsReadOnly="True" Margin="0,4,0,0" FontSize="12" />
+                    </StackPanel>
+                    <TextBlock x:Name="RemoteStatus" Margin="0,10,0,0" TextWrapping="Wrap" FontSize="12" />
+                    <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                               Text="Ak sa mobil nevie pripojiť, povoľ Stream Deck vo Windows Firewall pre súkromné siete. Viac v Návode." />
+                </StackPanel>
+
+                <!-- ───────────── OBS ───────────── -->
+                <StackPanel x:Name="ObsSection" Visibility="Collapsed">
+                    <TextBlock Text="OBS Studio" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,14"
+                               Text="V OBS zapni Nástroje → Nastavenia WebSocket servera → Povoliť WebSocket server. Postup krok za krokom je v Návode." />
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="70" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="Adresa" Style="{StaticResource FieldLabel}" />
+                        <TextBox Grid.Column="1" x:Name="ObsHostBox" />
+                        <TextBlock Grid.Column="2" Text=":" VerticalAlignment="Center" Margin="6,0" />
+                        <TextBox Grid.Column="3" x:Name="ObsPortBox" />
+                        <TextBlock Grid.Row="1" Text="Heslo" Style="{StaticResource FieldLabel}" Margin="0,10,0,0" />
+                        <PasswordBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" x:Name="ObsPasswordBox" Margin="0,10,0,0" />
+                    </Grid>
+                    <Button Content="Otestovať pripojenie" HorizontalAlignment="Left" Click="ObsTest_Click" />
+                    <TextBlock x:Name="ObsStatus" Margin="0,10,0,0" TextWrapping="Wrap" FontSize="12" />
+                </StackPanel>
+
+                <!-- ───────────── Návod ───────────── -->
+                <StackPanel x:Name="GuideSection" Visibility="Collapsed">
+                    <TextBlock Text="Návod" Style="{StaticResource SectionTitle}" />
+
+                    <TextBlock Text="Ako to funguje" Style="{StaticResource GuideTitle}" Margin="0,0,0,4" />
+                    <TextBlock Style="{StaticResource GuideText}">
+                        Deck je mriežka tlačidiel. Každé tlačidlo robí jednu vec: otvorí program alebo web, stlačí klávesovú skratku,
+                        ovláda hudbu, OBS alebo prepne profil. Okno decku si nevezme focus, takže skratka z tlačidla ide do appky,
+                        v ktorej práve pracuješ.
+                    </TextBlock>
+
+                    <TextBlock Text="Tlačidlá" Style="{StaticResource GuideTitle}" />
+                    <TextBlock Style="{StaticResource GuideText}">
+                        • <Bold>Pridať:</Bold> pretiahni program, odkaz, priečinok alebo adresu z prehliadača na mriežku. Alebo klikni na prázdne políčko.<LineBreak />
+                        • <Bold>Upraviť / vymazať:</Bold> pravý klik na tlačidlo.<LineBreak />
+                        • <Bold>Presunúť:</Bold> chyť tlačidlo myšou a pusti na iné políčko.<LineBreak />
+                        • <Bold>Ikona:</Bold> v editore pretiahni obrázok alebo program na náhľad ikony.
+                    </TextBlock>
+
+                    <TextBlock Text="Klávesové skratky" Style="{StaticResource GuideTitle}" />
+                    <TextBlock Style="{StaticResource GuideText}">
+                        V editore tlačidla klikni do poľa <Bold>Klávesová skratka</Bold> a stlač kombináciu (napr. Ctrl+Alt+1).
+                        Tlačidlo sa potom spustí touto skratkou kdekoľvek, aj keď je deck schovaný. Bez Ctrl/Alt/Shift sa hodia
+                        klávesy F13–F24 alebo numerická klávesnica.
+                    </TextBlock>
+
+                    <TextBlock Text="Profily" Style="{StaticResource GuideTitle}" />
+                    <TextBlock Style="{StaticResource GuideText}">
+                        Profil je samostatná sada tlačidiel, napr. „Hry“, „Stream“, „Práca“. Vytvoríš ho v sekcii Profily,
+                        prepneš kliknutím na jeho názov, z mobilu alebo tlačidlom s akciou <Bold>Prepnúť profil</Bold>.
+                    </TextBlock>
+
+                    <TextBlock Text="Pripojenie OBS" Style="{StaticResource GuideTitle}" />
+                    <TextBlock Style="{StaticResource GuideText}">
+                        1. V OBS otvor <Bold>Nástroje → Nastavenia WebSocket servera</Bold>.<LineBreak />
+                        2. Zaškrtni <Bold>Povoliť WebSocket server</Bold> a potvrď.<LineBreak />
+                        3. Klikni na <Bold>Zobraziť informácie o pripojení</Bold> a skopíruj heslo.<LineBreak />
+                        4. Tu v sekcii <Bold>OBS</Bold> vlož heslo (adresa localhost, port 4455) a klikni na Otestovať pripojenie.<LineBreak />
+                        5. Pri tlačidle vyber akciu <Bold>OBS Studio</Bold>. Scény a zdroje sa načítajú priamo z OBS.<LineBreak />
+                        Ak OBS beží na inom PC, zadaj jeho IP adresu namiesto localhost.
+                    </TextBlock>
+
+                    <TextBlock Text="Ovládanie z mobilu" Style="{StaticResource GuideTitle}" />
+                    <TextBlock Style="{StaticResource GuideText}">
+                        1. Mobil aj PC musia byť v <Bold>rovnakej Wi-Fi</Bold>.<LineBreak />
+                        2. V sekcii <Bold>Mobil</Bold> zaškrtni Povoliť ovládanie z mobilu.<LineBreak />
+                        3. Ak sa Windows opýta na prístup do siete, povoľ <Bold>súkromné siete</Bold>.<LineBreak />
+                        4. Naskenuj QR kód fotoaparátom mobilu a otvor odkaz.<LineBreak />
+                        5. V prehliadači daj <Bold>Pridať na plochu</Bold>, odvtedy sa deck otvorí ako appka na celú obrazovku.<LineBreak />
+                        Deck sa v mobile sám zobrazí na šírku. Ak sa mobil nepripojí, skús inú adresu PC v sekcii Mobil
+                        alebo skontroluj Windows Firewall (Nastavenia Windows → Ochrana → Brána firewall → Povoliť aplikáciu).
+                        Tlačidlo <Bold>Nový kód</Bold> odpojí všetky mobily.
+                    </TextBlock>
+
+                    <TextBlock Text="Okno a lišta" Style="{StaticResource GuideTitle}" />
+                    <TextBlock Style="{StaticResource GuideText}">
+                        Klik na ikonu v lište vedľa hodín deck schová alebo ukáže, appka beží ďalej a skratky fungujú.
+                        Krížik okno úplne ukončí (opýta sa). Keď spustíš novšiu verziu, stará sa sama nahradí.
+                    </TextBlock>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

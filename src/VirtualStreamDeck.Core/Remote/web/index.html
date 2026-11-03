@@ -23,7 +23,14 @@
     font: 14px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     overscroll-behavior: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   }
-  body { display: flex; flex-direction: column; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  body { overflow: hidden; }
+  /* The whole app lives in #app. Held upright, it is rotated 90° so the deck is always landscape. */
+  #app {
+    position: fixed; left: 0; top: 0; width: var(--app-w, 100vw); height: var(--app-h, 100vh);
+    display: flex; flex-direction: column; overflow: hidden;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  body.rotated #app { transform-origin: 0 0; transform: translateX(var(--vw)) rotate(90deg); padding: 0; }
   header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 12px; flex: none; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; transition: background .2s; }
   .dot.on { background: var(--ok); }
@@ -75,16 +82,19 @@
 </style>
 </head>
 <body>
+<div id="app">
 <header>
   <span class="dot" id="dot"></span>
   <span id="title">STREAM DECK</span>
   <select id="profile" hidden aria-label="Profil"></select>
   <span class="spacer"></span>
+  <button class="icon-btn" id="rot" title="Na šírku / na výšku" aria-label="Otočiť">⟲</button>
   <button class="icon-btn" id="fs" title="Celá obrazovka" aria-label="Celá obrazovka">⛶</button>
 </header>
 <main><div id="grid"></div></main>
 <div id="overlay"><h1 id="ov-title">Pripájam…</h1><p id="ov-text"></p></div>
 <div id="toast"></div>
+</div>
 
 <script>
 (() => {
@@ -167,7 +177,7 @@
     if (!deck) return;
     const main = grid.parentElement;
     const gap = 10;
-    const w = main.clientWidth - 24, h = main.clientHeight - 20;
+    const w = main.clientWidth - 24, h = main.clientHeight - 20; // un-rotated sizes, also when #app is rotated
     const size = Math.floor(Math.min(
       (w - gap * (deck.columns - 1)) / deck.columns,
       (h - gap * (deck.rows - 1)) / deck.rows,
@@ -268,19 +278,51 @@
 
   // ───────── misc ─────────
 
+  // ───────── always landscape ─────────
+  // Held upright, the app is drawn rotated by 90°, so you just turn the phone. In full screen
+  // (Android) the real orientation is locked to landscape and no rotation is needed.
+  let autoLandscape = true;
+  try { autoLandscape = localStorage.getItem("vsd-landscape") !== "0"; } catch (e) {}
+
+  function fit() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const rotate = autoLandscape && vh > vw;
+    document.body.classList.toggle("rotated", rotate);
+    const root = document.documentElement.style;
+    root.setProperty("--vw", vw + "px");
+    root.setProperty("--app-w", (rotate ? vh : vw) + "px");
+    root.setProperty("--app-h", (rotate ? vw : vh) + "px");
+    layout();
+  }
+
+  function lockLandscape() {
+    if (autoLandscape && screen.orientation && screen.orientation.lock)
+      screen.orientation.lock("landscape").catch(() => {});
+  }
+
+  $("rot").addEventListener("click", () => {
+    autoLandscape = !autoLandscape;
+    try { localStorage.setItem("vsd-landscape", autoLandscape ? "1" : "0"); } catch (e) {}
+    if (!autoLandscape && screen.orientation && screen.orientation.unlock) { try { screen.orientation.unlock(); } catch (e) {} }
+    else lockLandscape();
+    fit();
+  });
+
   $("fs").addEventListener("click", () => {
     const el = document.documentElement;
     if (document.fullscreenElement) document.exitFullscreen();
-    else if (el.requestFullscreen) el.requestFullscreen().catch(() => toast("Celá obrazovka nie je dostupná. Skús „Pridať na plochu“."));
+    else if (el.requestFullscreen) el.requestFullscreen().then(lockLandscape).catch(() => toast("Celá obrazovka nie je dostupná. Skús „Pridať na plochu“."));
     else toast("Pre celú obrazovku daj v prehliadači „Pridať na plochu“.");
   });
-  if (window.matchMedia("(display-mode: standalone)").matches) $("fs").hidden = true;
+  if (window.matchMedia("(display-mode: standalone)").matches) { $("fs").hidden = true; lockLandscape(); }
 
-  window.addEventListener("resize", layout);
+  window.addEventListener("resize", fit);
+  window.addEventListener("orientationchange", () => setTimeout(fit, 100));
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && (!ws || ws.readyState > 1)) { retry = 0; connect(); }
   });
 
+  fit();
   connect();
 })();
 </script>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -29,6 +30,7 @@ public partial class MainWindow : Window
     private static readonly Brush EmptyGlyphBrush = Frozen(0x5A, 0x5A, 0x63);
     private static readonly Brush AccentBrush = Frozen(0x4C, 0x8D, 0xFF);
     private static readonly Brush ErrorBrush = Frozen(0xE5, 0x48, 0x4D);
+    private static readonly Brush ErrorTextBrush = Frozen(0xFF, 0xC9, 0xCB);
 
     private readonly Deck _deck;
     private readonly ObsClient _obs;
@@ -43,12 +45,8 @@ public partial class MainWindow : Window
     private Border? _pressedTile;
     private Point _pressPoint;
 
-    // Window drag state (manual, because a non-activating window does not drag well with DragMove)
-    private bool _movingWindow;
-    private Win32.POINT _moveStartCursor;
-    private double _moveStartLeft, _moveStartTop;
-
     private int _statusVersion;
+    private readonly System.Windows.Threading.DispatcherTimer _savePositionTimer;
 
     internal MainWindow(Deck deck, ObsClient obs, RemoteServer remote)
     {
@@ -73,7 +71,26 @@ public partial class MainWindow : Window
         };
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
-        SizeChanged += (_, _) => KeepOnScreen();
+        SizeChanged += (_, _) => KeepOnScreen(whole: SidePanel.Visibility == Visibility.Visible);
+
+        // Remember where the window was moved to (debounced, the title bar fires this continuously).
+        _savePositionTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+        _savePositionTimer.Tick += (_, _) =>
+        {
+            _savePositionTimer.Stop();
+            if (WindowState != WindowState.Normal || !IsVisible) return;
+            double left = Left, top = Top;
+            _deck.Update(c => c.Settings.Window = new WindowPosition { X = left, Y = top }, notify: false);
+        };
+        LocationChanged += (_, _) =>
+        {
+            if (!IsLoaded) return;
+            _savePositionTimer.Stop();
+            _savePositionTimer.Start();
+        };
+
+        SidePanel.Initialize(deck, obs, remote);
+        SidePanel.CollapseRequested += () => SetPanel(null);
         Rebuild();
     }
 
@@ -82,12 +99,9 @@ public partial class MainWindow : Window
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         // WS_EX_NOACTIVATE: clicking the deck never steals focus, so key combos
-        // go to the app the user is working in. (Not a tool window: with ShowInTaskbar=False
-        // WPF gives it a hidden owner, which already keeps it out of the taskbar and Alt+Tab,
-        // and it can still get a real taskbar button while minimized.)
-        var hwnd = new WindowInteropHelper(this).Handle;
-        long ex = Win32.GetWindowLongPtr(hwnd, Win32.GWL_EXSTYLE).ToInt64();
-        Win32.SetWindowLongPtr(hwnd, Win32.GWL_EXSTYLE, new IntPtr(ex | Win32.WS_EX_NOACTIVATE));
+        // go to the app the user is working in. Turned off while the side panel is open
+        // (the panel has text boxes, which need keyboard focus).
+        SetNoActivate(true);
 
         _hotkeys = new HotkeyService(this);
         _hotkeys.Pressed += Press;
@@ -105,12 +119,26 @@ public partial class MainWindow : Window
         }
     }
 
+    private void SetNoActivate(bool on)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+        long ex = Win32.GetWindowLongPtr(hwnd, Win32.GWL_EXSTYLE).ToInt64();
+        ex = on ? ex | Win32.WS_EX_NOACTIVATE : ex & ~Win32.WS_EX_NOACTIVATE;
+        Win32.SetWindowLongPtr(hwnd, Win32.GWL_EXSTYLE, new IntPtr(ex));
+    }
+
+    /// <summary>The window's own close button (×) quits the app, after asking.</summary>
     protected override void OnClosing(CancelEventArgs e)
     {
         if (!_exiting)
         {
             e.Cancel = true;
-            Hide();
+            var answer = MessageBox.Show(this,
+                "Naozaj ukončiť Virtual Stream Deck?\n\nKlávesové skratky aj ovládanie z mobilu prestanú fungovať.\n" +
+                "Ak chceš okno len schovať, minimalizuj ho alebo klikni na ikonu v lište vedľa hodín.",
+                "Ukončiť Stream Deck", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+            if (answer == MessageBoxResult.Yes) Dispatcher.InvokeAsync(((App)Application.Current).ExitApp);
             return;
         }
         base.OnClosing(e);
@@ -130,28 +158,65 @@ public partial class MainWindow : Window
         KeepOnScreen();
     }
 
+    protected override void OnStateChanged(EventArgs e)
+    {
+        base.OnStateChanged(e);
+        if (WindowState == WindowState.Normal) KeepOnScreen();
+    }
+
     public void ToggleVisibility()
     {
         if (IsVisible && WindowState != WindowState.Minimized) Hide();
         else ShowDeck();
     }
 
-    /// <summary>Real minimize: the deck gets a taskbar button only while it is minimized.</summary>
-    private void Minimize_Click(object sender, RoutedEventArgs e)
+    // ───────────────────────── side panel ─────────────────────────
+
+    /// <summary>Opens the side panel at a section, or collapses it (null).</summary>
+    private void SetPanel(string? section)
     {
-        ShowInTaskbar = true;
-        WindowState = WindowState.Minimized;
+        bool open = section != null;
+        if (open)
+        {
+            SidePanel.ShowSection(section!);
+            SidePanel.Visibility = Visibility.Visible;
+            SetNoActivate(false);
+            Activate();
+        }
+        else
+        {
+            SidePanel.Visibility = Visibility.Collapsed;
+            SetNoActivate(true);
+        }
+
+        var current = open ? SidePanel.CurrentSection : null;
+        ProfilesRailButton.Tag = current == SettingsPanel.Profiles ? "active" : null;
+        GuideRailButton.Tag = current == SettingsPanel.Guide ? "active" : null;
+        SettingsRailButton.Tag = current is SettingsPanel.Layout or SettingsPanel.General or SettingsPanel.Phone or SettingsPanel.Obs
+            ? "active" : null;
     }
 
-    protected override void OnStateChanged(EventArgs e)
+    /// <summary>Rail button: open the panel at that section, or collapse it if it's already showing.</summary>
+    private void ToggleSection(string section, params string[] alsoMine)
     {
-        base.OnStateChanged(e);
-        if (WindowState != WindowState.Minimized && ShowInTaskbar)
-        {
-            ShowInTaskbar = false;
-            KeepOnScreen();
-        }
+        bool showingMine = SidePanel.Visibility == Visibility.Visible &&
+                           (SidePanel.CurrentSection == section || alsoMine.Contains(SidePanel.CurrentSection));
+        SetPanel(showingMine ? null : section);
     }
+
+    private string _lastSettingsSection = SettingsPanel.Layout;
+
+    private void ProfilesRail_Click(object sender, RoutedEventArgs e) => ToggleSection(SettingsPanel.Profiles);
+
+    private void SettingsRail_Click(object sender, RoutedEventArgs e)
+    {
+        if (SidePanel.Visibility == Visibility.Visible &&
+            SidePanel.CurrentSection is SettingsPanel.Layout or SettingsPanel.General or SettingsPanel.Phone or SettingsPanel.Obs)
+            _lastSettingsSection = SidePanel.CurrentSection;
+        ToggleSection(_lastSettingsSection, SettingsPanel.Layout, SettingsPanel.General, SettingsPanel.Phone, SettingsPanel.Obs);
+    }
+
+    private void GuideRail_Click(object sender, RoutedEventArgs e) => ToggleSection(SettingsPanel.Guide);
 
     // ───────────────────────── grid ─────────────────────────
 
@@ -162,7 +227,7 @@ public partial class MainWindow : Window
         int rows = config.Rows, columns = config.Columns;
 
         Topmost = s.AlwaysOnTop;
-        ProfileNameText.Text = config.ActiveProfile.Name;
+        Title = $"Stream Deck – {config.ActiveProfile.Name}";
         DeckGrid.Rows = rows;
         DeckGrid.Columns = columns;
         DeckGrid.Children.Clear();
@@ -506,16 +571,17 @@ public partial class MainWindow : Window
         if (tile.BorderBrush == brush) tile.BorderBrush = Brushes.Transparent;
     }
 
+    /// <summary>Small toast at the bottom of the deck.</summary>
     private async void ShowStatus(string text, bool isError)
     {
         int version = ++_statusVersion;
-        HeaderText.Text = text;
-        HeaderText.Foreground = isError ? ErrorBrush : AccentBrush;
-        HeaderText.ToolTip = text;
+        StatusText.Text = text;
+        StatusText.Foreground = isError ? ErrorTextBrush : LabelBrush;
+        StatusToast.BorderBrush = isError ? ErrorBrush : AccentBrush;
+        StatusToast.Visibility = Visibility.Visible;
         await Task.Delay(isError ? 6000 : 3500);
         if (version != _statusVersion) return;
-        HeaderText.Text = "";
-        HeaderText.ToolTip = null;
+        StatusToast.Visibility = Visibility.Collapsed;
     }
 
     private void ReportHotkeyFailures()
@@ -673,90 +739,11 @@ public partial class MainWindow : Window
         if (_tiles.TryGetValue(buttonId, out var tile)) Pulse(tile);
     }
 
-    // ───────────────────────── profiles ─────────────────────────
-
-    private void ProfileButton_Click(object sender, RoutedEventArgs e)
+    /// <summary>Tray menu "Nastavenia…": show the deck with the side panel open.</summary>
+    public void OpenSettings(string? section = null)
     {
-        var config = _deck.Config;
-        var menu = new ContextMenu { PlacementTarget = ProfileButton, Placement = PlacementMode.Bottom };
-        foreach (var profile in config.Profiles)
-        {
-            var id = profile.Id;
-            var item = new MenuItem
-            {
-                Header = profile.Name,
-                IsCheckable = true,
-                IsChecked = id == config.ActiveProfile.Id,
-            };
-            item.Click += (_, _) => _deck.SwitchProfile(id);
-            menu.Items.Add(item);
-        }
-        menu.Items.Add(new Separator());
-        var manage = new MenuItem { Header = "Spravovať profily…" };
-        manage.Click += (_, _) => OpenSettings(SettingsWindow.ProfilesTab);
-        menu.Items.Add(manage);
-        menu.IsOpen = true;
-    }
-
-    // ───────────────────────── quitting ─────────────────────────
-
-    private void Close_Click(object sender, RoutedEventArgs e)
-    {
-        var answer = MessageBox.Show(this,
-            "Naozaj ukončiť Virtual Stream Deck?\n\nKlávesové skratky aj ovládanie z mobilu prestanú fungovať.\n" +
-            "Ak chceš okno len schovať, použi – (minimalizovať) alebo klikni na ikonu v lište.",
-            "Ukončiť Stream Deck", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
-        if (answer == MessageBoxResult.Yes) ((App)Application.Current).ExitApp();
-    }
-
-    public void OpenSettings(string? tab = null)
-    {
-        if (_dialogOpen) return;
         ShowDeck();
-        _dialogOpen = true;
-        try
-        {
-            new SettingsWindow(_deck, _obs, _remote, tab) { Owner = this }.ShowDialog();
-        }
-        finally
-        {
-            _dialogOpen = false;
-        }
-        ReportHotkeyFailures();
-    }
-
-    private void Settings_Click(object sender, RoutedEventArgs e) => OpenSettings();
-
-
-    // ───────────────────────── moving the window ─────────────────────────
-
-    private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        Win32.GetCursorPos(out _moveStartCursor);
-        _moveStartLeft = Left;
-        _moveStartTop = Top;
-        _movingWindow = true;
-        Header.CaptureMouse();
-        e.Handled = true;
-    }
-
-    private void Header_MouseMove(object sender, MouseEventArgs e)
-    {
-        if (!_movingWindow) return;
-        Win32.GetCursorPos(out var p);
-        var dpi = VisualTreeHelper.GetDpi(this);
-        Left = _moveStartLeft + (p.X - _moveStartCursor.X) / dpi.DpiScaleX;
-        Top = _moveStartTop + (p.Y - _moveStartCursor.Y) / dpi.DpiScaleY;
-    }
-
-    private void Header_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-    {
-        if (!_movingWindow) return;
-        _movingWindow = false;
-        Header.ReleaseMouseCapture();
-        KeepOnScreen();
-        double left = Left, top = Top;
-        _deck.Update(c => c.Settings.Window = new WindowPosition { X = left, Y = top }, notify: false);
+        SetPanel(section ?? _lastSettingsSection);
     }
 
     private static bool IsOnScreen(double x, double y) =>
@@ -765,14 +752,17 @@ public partial class MainWindow : Window
         x <= SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - 60 &&
         y <= SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - 40;
 
-    /// <summary>Keeps at least the header reachable, e.g. after the grid grows or a monitor is unplugged.</summary>
-    private void KeepOnScreen()
+    /// <summary>
+    /// Keeps the title bar reachable (e.g. after the grid grows or a monitor is unplugged).
+    /// With <paramref name="whole"/> the entire window is pulled on screen (side panel just opened).
+    /// </summary>
+    private void KeepOnScreen(bool whole = false)
     {
-        if (!IsLoaded) return;
+        if (!IsLoaded || WindowState != WindowState.Normal) return;
         double minX = SystemParameters.VirtualScreenLeft;
         double minY = SystemParameters.VirtualScreenTop;
-        double maxX = minX + SystemParameters.VirtualScreenWidth - Math.Min(ActualWidth, 120);
-        double maxY = minY + SystemParameters.VirtualScreenHeight - 40;
+        double maxX = minX + SystemParameters.VirtualScreenWidth - (whole ? ActualWidth : Math.Min(ActualWidth, 120));
+        double maxY = minY + SystemParameters.VirtualScreenHeight - (whole ? ActualHeight : 40);
         Left = Math.Clamp(Left, minX, Math.Max(minX, maxX));
         Top = Math.Clamp(Top, minY, Math.Max(minY, maxY));
     }

@@ -9,11 +9,14 @@ Jednoduchý virtuálny streamdeck pre Windows 10/11. Malé okno s mriežkou tla�
 | Upraviť / vymazať | pravý klik na tlačidlo |
 | Presunúť | ťahaj tlačidlo na iné políčko (obsadené políčka sa vymenia) |
 | Presunúť okno | ťahaj za horný pruh |
-| Nastavenia | ozubené koliesko v hornom pruhu alebo ikona v lište (tray); karty Všeobecné / Rozloženie / Profily / Mobil / OBS |
-| Prepnúť profil | názov profilu vľavo v hornom pruhu |
-| Minimalizovať | `–` v hornom pruhu, okno sa schová na panel úloh |
+| Nastavenia, profily, návod | lišta s ikonami vpravo od mriežky otvorí bočný panel (Profily, Rozloženie, Všeobecné, Mobil, OBS, Návod); šípka v paneli ho zbalí |
+| Prepnúť profil | ikona profilov → klik na profil; alebo tlačidlo s akciou Prepnúť profil; alebo z mobilu |
+| Presunúť okno | štandardne za titulok okna |
+| Minimalizovať | štandardné tlačidlo okna |
 | Schovať do lišty | klik na ikonu v lište (appka beží ďalej, hotkeys fungujú) |
-| Ukončiť | `×` v hornom pruhu (s potvrdením) alebo pravý klik na ikonu v lište → Ukončiť |
+| Ukončiť | `×` okna (s potvrdením) alebo pravý klik na ikonu v lište → Ukončiť |
+
+Kým je bočný panel otvorený, deck sa správa ako bežné okno (dá sa doň písať). Po zbalení znova nekradne focus, takže skratky z tlačidiel idú do appky, v ktorej pracuješ.
 
 Keď spustíš novšiu verziu, kým stará beží v lište, nová ju sama ukončí a nahradí. Verziu nájdeš v Nastavenia → Všeobecné.
 
@@ -30,6 +33,7 @@ Každý profil má vlastnú mriežku (riadky × stĺpce) a vlastné tlačidlá. 
 1. **Nastavenia → Mobil** → zaškrtni *Povoliť ovládanie z mobilu*.
 2. Naskenuj QR kód fotoaparátom mobilu. Otvorí sa stránka s tvojou mriežkou, ťuknutie stlačí tlačidlo na PC.
 3. Pre celú obrazovku daj v prehliadači *Pridať na plochu* (alebo ⛶ vpravo hore).
+4. Deck je v mobile vždy na šírku: na výšku sa stránka sama otočí, stačí natočiť mobil. Vypnúť sa to dá ikonou ⟲.
 
 Mobil musí byť v rovnakej Wi-Fi. Pri prvom zapnutí sa Windows môže opýtať na prístup do siete, povoľ súkromné siete. QR kód obsahuje tajný kľúč, bez neho sa nikto iný v sieti nepripojí. *Nový kód* všetky mobily odpojí. Server beží na porte 8765 (dá sa zmeniť) a nepoužíva HTTPS, je určený len do domácej siete.
 

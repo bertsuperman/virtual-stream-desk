@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -13,22 +12,35 @@ using VirtualStreamDeck.Core.Remote;
 
 namespace VirtualStreamDeck.App;
 
-/// <summary>Every change is applied and saved immediately, so the deck updates live.</summary>
-public partial class SettingsWindow : Window
+/// <summary>
+/// Settings, profiles and the guide as a collapsible side panel of the main window.
+/// Every change is applied and saved immediately.
+/// </summary>
+public partial class SettingsPanel : UserControl
 {
-    public const string ProfilesTab = "Profily";
+    public const string Profiles = "profiles", Layout = "layout", General = "general",
+        Phone = "phone", Obs = "obs", Guide = "guide";
 
-    private static readonly Brush OkBrush = new SolidColorBrush(Color.FromRgb(0x5C, 0xCB, 0x6E));
-    private static readonly Brush ErrorBrush = new SolidColorBrush(Color.FromRgb(0xF0, 0x6A, 0x6A));
+    private static readonly Brush OkBrush = Frozen(0x5C, 0xCB, 0x6E);
+    private static readonly Brush ErrorBrush = Frozen(0xF0, 0x6A, 0x6A);
 
-    private readonly Deck _deck;
-    private readonly ObsClient _obs;
-    private readonly RemoteServer _remote;
-    private bool _loading;
+    private Deck _deck = null!;
+    private ObsClient _obs = null!;
+    private RemoteServer _remote = null!;
+    private bool _loading = true;
 
-    internal SettingsWindow(Deck deck, ObsClient obs, RemoteServer remote, string? tab = null)
+    public SettingsPanel()
     {
         InitializeComponent();
+    }
+
+    /// <summary>Raised when the user clicks the collapse arrow.</summary>
+    public event Action? CollapseRequested;
+
+    public string CurrentSection => (Nav.SelectedItem as ListBoxItem)?.Tag as string ?? Profiles;
+
+    internal void Initialize(Deck deck, ObsClient obs, RemoteServer remote)
+    {
         _deck = deck;
         _obs = obs;
         _remote = remote;
@@ -47,10 +59,10 @@ public partial class SettingsWindow : Window
         RemoteEnabledBox.IsChecked = s.Remote.Enabled;
         RemotePortBox.Text = s.Remote.Port.ToString();
         LoadAddresses();
+        Nav.SelectedIndex = 0;
         RefreshFromDeck();
         _loading = false;
 
-        // General / layout
         RowsSlider.ValueChanged += (_, _) => ApplyGrid();
         ColumnsSlider.ValueChanged += (_, _) => ApplyGrid();
         SizeSlider.ValueChanged += (_, _) => Apply();
@@ -63,16 +75,12 @@ public partial class SettingsWindow : Window
             Apply();
         };
 
-        // Profiles
-        ProfileList.SelectionChanged += (_, _) => ShowSelectedProfileName();
-        ProfileNameBox.TextChanged += (_, _) => RenameSelectedProfile();
+        ProfileNameBox.TextChanged += (_, _) => RenameActiveProfile();
 
-        // OBS
         ObsHostBox.TextChanged += (_, _) => ApplyObs();
         ObsPortBox.TextChanged += (_, _) => ApplyObs();
         ObsPasswordBox.PasswordChanged += (_, _) => ApplyObs();
 
-        // Phone
         RemoteEnabledBox.Click += (_, _) => ApplyRemote(c => c.Settings.Remote.Enabled = RemoteEnabledBox.IsChecked == true);
         RemotePortBox.LostFocus += (_, _) => ApplyRemotePort();
         RemotePortBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) ApplyRemotePort(); };
@@ -82,25 +90,34 @@ public partial class SettingsWindow : Window
             _deck.Update(c => c.Settings.Remote.Address = a.Address, notify: false);
             RefreshRemote();
         };
-        _remote.ClientsChanged += OnClientsChanged;
+        _remote.ClientsChanged += () => Dispatcher.InvokeAsync(RefreshRemote);
 
-        // The phone can switch profiles while this window is open.
-        _deck.Changed += OnDeckChanged;
-        Closed += (_, _) =>
-        {
-            _deck.Changed -= OnDeckChanged;
-            _remote.ClientsChanged -= OnClientsChanged;
-        };
-
-        if (tab != null)
-            Tabs.SelectedItem = Tabs.Items.OfType<TabItem>().FirstOrDefault(t => (string)t.Header == tab) ?? Tabs.SelectedItem;
+        // Changes from anywhere (header, phone, buttons) keep the panel in sync.
+        _deck.Changed += (_, _) => Dispatcher.InvokeAsync(RefreshFromDeck);
     }
 
-    private void OnDeckChanged(object? sender, EventArgs e) => Dispatcher.InvokeAsync(RefreshFromDeck);
+    public void ShowSection(string key)
+    {
+        var item = Nav.Items.OfType<ListBoxItem>().FirstOrDefault(i => (string)i.Tag == key);
+        if (item != null) Nav.SelectedItem = item;
+        if (key == Phone) LoadAddresses(); // the network may have changed since startup
+        RefreshRemote();
+    }
 
-    private void OnClientsChanged() => Dispatcher.InvokeAsync(RefreshRemote);
+    private void Nav_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ProfilesSection == null) return; // during InitializeComponent
+        var key = CurrentSection;
+        ProfilesSection.Visibility = key == Profiles ? Visibility.Visible : Visibility.Collapsed;
+        LayoutSection.Visibility = key == Layout ? Visibility.Visible : Visibility.Collapsed;
+        GeneralSection.Visibility = key == General ? Visibility.Visible : Visibility.Collapsed;
+        PhoneSection.Visibility = key == Phone ? Visibility.Visible : Visibility.Collapsed;
+        ObsSection.Visibility = key == Obs ? Visibility.Visible : Visibility.Collapsed;
+        GuideSection.Visibility = key == Guide ? Visibility.Visible : Visibility.Collapsed;
+    }
 
-    /// <summary>Re-reads everything that depends on the active profile.</summary>
+    private void Collapse_Click(object sender, RoutedEventArgs e) => CollapseRequested?.Invoke();
+
     private void RefreshFromDeck()
     {
         bool wasLoading = _loading;
@@ -115,7 +132,9 @@ public partial class SettingsWindow : Window
         _loading = wasLoading;
     }
 
-    // ───────────────────────── general / layout ─────────────────────────
+    private Window? Owner => Window.GetWindow(this);
+
+    // ───────────────────────── layout / general ─────────────────────────
 
     private void Apply()
     {
@@ -158,109 +177,88 @@ public partial class SettingsWindow : Window
         public override string ToString() => Text;
     }
 
-    private string? SelectedProfileId => (ProfileList.SelectedItem as ProfileItem)?.Id;
-
-    private void RefreshProfiles(string? select = null)
+    private void RefreshProfiles()
     {
         var config = _deck.Config;
-        select ??= SelectedProfileId ?? config.ActiveProfile.Id;
+        var activeId = config.ActiveProfile.Id;
         var items = config.Profiles.Select(p => new ProfileItem(p.Id,
-            $"{p.Name}   ·   {p.Buttons.Count} {Plural(p.Buttons.Count, "tlačidlo", "tlačidlá", "tlačidiel")}" +
-            (p.Id == config.ActiveProfile.Id ? "   ✓ aktívny" : ""))).ToList();
+            (p.Id == activeId ? "✓  " : "     ") + p.Name +
+            $"   ·   {p.Buttons.Count} {Plural(p.Buttons.Count, "tlačidlo", "tlačidlá", "tlačidiel")}")).ToList();
 
         bool wasLoading = _loading;
         _loading = true;
         ProfileList.ItemsSource = items;
-        ProfileList.SelectedItem = items.FirstOrDefault(i => i.Id == select) ?? items.FirstOrDefault();
-        ShowSelectedProfileName();
+        ProfileList.SelectedItem = items.FirstOrDefault(i => i.Id == activeId);
+        // Don't fight the user while they type (the saved name is trimmed, the text box isn't).
+        if (!(ProfileNameBox.IsKeyboardFocusWithin && ProfileNameBox.Text.Trim() == config.ActiveProfile.Name))
+            ProfileNameBox.Text = config.ActiveProfile.Name;
         _loading = wasLoading;
     }
 
-    private static string Plural(int n, string one, string few, string many) =>
+    internal static string Plural(int n, string one, string few, string many) =>
         n == 1 ? one : n is >= 2 and <= 4 ? few : many;
 
-    private void ShowSelectedProfileName()
+    private void ProfileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var profile = _deck.Config.FindProfile(SelectedProfileId);
-        // Don't fight the user while they type (the saved name is trimmed, the text box isn't).
-        if (ProfileNameBox.IsKeyboardFocusWithin && profile != null &&
-            ProfileNameBox.Text.Trim() == profile.Name) return;
-        bool wasLoading = _loading;
-        _loading = true;
-        ProfileNameBox.Text = profile?.Name ?? "";
-        ProfileNameBox.IsEnabled = profile != null;
-        _loading = wasLoading;
+        if (_loading || ProfileList.SelectedItem is not ProfileItem item) return;
+        _deck.SwitchProfile(item.Id);
     }
 
-    private void RenameSelectedProfile()
+    private void RenameActiveProfile()
     {
-        if (_loading || SelectedProfileId is not { } id || string.IsNullOrWhiteSpace(ProfileNameBox.Text)) return;
+        if (_loading || string.IsNullOrWhiteSpace(ProfileNameBox.Text)) return;
         var name = ProfileNameBox.Text.Trim();
-        _deck.Update(c =>
-        {
-            if (c.FindProfile(id) is { } p) p.Name = name;
-        });
+        if (name == _deck.Config.ActiveProfile.Name) return;
+        _deck.Update(c => c.ActiveProfile.Name = name);
     }
-
-    private void ProfileActivate_Click(object sender, RoutedEventArgs e)
-    {
-        if (SelectedProfileId is { } id) _deck.SwitchProfile(id);
-    }
-
-    private void ProfileList_MouseDoubleClick(object sender, MouseButtonEventArgs e) => ProfileActivate_Click(sender, e);
 
     private void ProfileNew_Click(object sender, RoutedEventArgs e)
     {
-        string id = "";
-        _deck.Update(c =>
-        {
-            var p = c.AddProfile(c.UniqueProfileName("Nový profil"));
-            id = p.Id;
-            c.ActiveProfileId = id; // switch right away so you can start adding buttons
-        });
-        RefreshProfiles(id);
+        _deck.Update(c => c.ActiveProfileId = c.AddProfile(c.UniqueProfileName("Nový profil")).Id);
+        RefreshFromDeck();
         ProfileNameBox.Focus();
         ProfileNameBox.SelectAll();
     }
 
     private void ProfileDuplicate_Click(object sender, RoutedEventArgs e)
     {
-        if (SelectedProfileId is not { } sourceId) return;
-        string id = "";
         _deck.Update(c =>
         {
-            var source = c.FindProfile(sourceId)!;
-            id = c.DuplicateProfile(sourceId, c.UniqueProfileName(source.Name + " (kópia)")).Id;
+            var source = c.ActiveProfile;
+            c.ActiveProfileId = c.DuplicateProfile(source.Id, c.UniqueProfileName(source.Name + " (kópia)")).Id;
         });
-        RefreshProfiles(id);
+        RefreshFromDeck();
     }
 
     private void ProfileDelete_Click(object sender, RoutedEventArgs e)
     {
-        var profile = _deck.Config.FindProfile(SelectedProfileId);
-        if (profile == null) return;
+        var profile = _deck.Config.ActiveProfile;
         if (_deck.Config.Profiles.Count <= 1)
         {
-            MessageBox.Show(this, "Posledný profil sa vymazať nedá.", AppInfo.ProductName, MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(Owner!, "Posledný profil sa vymazať nedá.", AppInfo.ProductName,
+                MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var answer = MessageBox.Show(this,
+        var answer = MessageBox.Show(Owner!,
             $"Vymazať profil „{profile.Name}“ aj s jeho {profile.Buttons.Count} tlačidlami?",
             "Vymazať profil", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
         if (answer != MessageBoxResult.Yes) return;
         var id = profile.Id;
         _deck.Update(c => c.RemoveProfile(id));
-        RefreshProfiles(_deck.Config.ActiveProfile.Id);
+        RefreshFromDeck();
     }
 
     // ───────────────────────── phone ─────────────────────────
 
     private void LoadAddresses()
     {
+        bool wasLoading = _loading;
+        _loading = true;
         var addresses = NetworkInfo.GetLanAddresses();
         AddressBox.ItemsSource = addresses;
         var saved = _deck.Config.Settings.Remote.Address;
         AddressBox.SelectedItem = addresses.FirstOrDefault(a => a.Address == saved) ?? addresses.FirstOrDefault();
+        _loading = wasLoading;
     }
 
     private void ApplyRemote(Action<DeckConfig> change)
@@ -289,10 +287,10 @@ public partial class SettingsWindow : Window
 
     private void RefreshRemote()
     {
+        if (_deck == null) return;
         var r = _deck.Config.Settings.Remote;
         RemotePanel.IsEnabled = r.Enabled;
-        RemotePanel.Opacity = r.Enabled ? 1 : 0.35;
-        UrlBox.Visibility = r.Enabled ? Visibility.Visible : Visibility.Collapsed;
+        RemotePanel.Visibility = r.Enabled ? Visibility.Visible : Visibility.Collapsed;
 
         var url = r.Enabled ? CurrentUrl() : null;
         QrImage.Source = url != null ? RenderQr(url) : null;
@@ -353,7 +351,7 @@ public partial class SettingsWindow : Window
 
     private void NewToken_Click(object sender, RoutedEventArgs e)
     {
-        var answer = MessageBox.Show(this,
+        var answer = MessageBox.Show(Owner!,
             "Vytvoriť nový QR kód? Všetky pripojené mobily sa odpoja a budú musieť naskenovať nový kód.",
             "Nový kód", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
         if (answer == MessageBoxResult.Yes) ApplyRemote(c => c.Settings.Remote.Token = RemoteSettings.NewToken());
@@ -361,7 +359,6 @@ public partial class SettingsWindow : Window
 
     // ───────────────────────── OBS ─────────────────────────
 
-    /// <summary>OBS fields change on every keystroke, so save silently (no grid rebuild) and just reconfigure the client.</summary>
     private void ApplyObs()
     {
         if (_loading) return;
@@ -391,5 +388,12 @@ public partial class SettingsWindow : Window
             ObsStatus.Foreground = ErrorBrush;
             ObsStatus.Text = ex.Message;
         }
+    }
+
+    private static Brush Frozen(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
     }
 }
