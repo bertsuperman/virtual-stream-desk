@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- Only for the tray icon (NotifyIcon). Implicit usings are off to avoid WPF/WinForms name clashes. -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>VirtualStreamDeck.App</RootNamespace>
+    <AssemblyName>VirtualStreamDeck</AssemblyName>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Product>Virtual Stream Deck</Product>
+    <Version>0.1.0</Version>
+    <!-- WPF0001: Fluent ThemeMode is marked experimental. -->
+    <NoWarn>$(NoWarn);WPF0001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VirtualStreamDeck.Core\VirtualStreamDeck.Core.csproj" />
+  </ItemGroup>
+
+</Project>

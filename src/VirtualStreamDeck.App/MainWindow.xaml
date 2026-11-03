@@ -1,0 +1,70 @@
+<Window x:Class="VirtualStreamDeck.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Virtual Stream Deck"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="Manual"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        Background="#FF17171A"
+        BorderBrush="#FF2E2E34"
+        BorderThickness="1"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+
+    <Window.Resources>
+        <Style x:Key="HeaderButton" TargetType="Button">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Foreground" Value="#FF8A8A94" />
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#FF2C2C33" />
+                                <Setter Property="Foreground" Value="#FFEDEDF2" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Header: drag to move, settings, hide to tray -->
+        <Grid x:Name="Header"
+              DockPanel.Dock="Top"
+              Height="26"
+              Background="Transparent"
+              Cursor="SizeAll"
+              MouseLeftButtonDown="Header_MouseLeftButtonDown"
+              MouseMove="Header_MouseMove"
+              MouseLeftButtonUp="Header_MouseLeftButtonUp">
+            <TextBlock x:Name="HeaderText"
+                       Text="STREAM DECK"
+                       Margin="10,0,64,0"
+                       VerticalAlignment="Center"
+                       FontSize="10"
+                       FontWeight="SemiBold"
+                       Foreground="#FF5F5F68"
+                       TextTrimming="CharacterEllipsis" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,4,0">
+                <Button Style="{StaticResource HeaderButton}" Content="&#xE713;" ToolTip="Nastavenia" Click="Settings_Click" />
+                <Button Style="{StaticResource HeaderButton}" Content="&#xE921;" ToolTip="Skryť do lišty" Click="Hide_Click" />
+            </StackPanel>
+        </Grid>
+
+        <UniformGrid x:Name="DeckGrid" Margin="6,0,6,6" />
+    </DockPanel>
+</Window>
