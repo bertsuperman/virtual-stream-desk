@@ -69,7 +69,7 @@ internal abstract class HotkeyService : IDisposable
 
     private sealed class NoHotkeys : HotkeyService
     {
-        protected override bool Register(string buttonId, Hotkey hotkey) => false;
+        protected override bool Register(string buttonId, Hotkey hotkey) => true; // nothing to collide with
         protected override void UnregisterAll() { }
     }
 }

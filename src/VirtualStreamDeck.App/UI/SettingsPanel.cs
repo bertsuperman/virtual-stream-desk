@@ -426,7 +426,7 @@ internal sealed class SettingsPanel : Border
                 }); // phones get the new language too
             });
         };
-        var languageRow = FormGrid("120,*");
+        var languageRow = FormGrid("150,*");
         var languageLabel = Ui.FieldLabel("Jazyk / Language");
         Grid.SetColumn(_language, 1);
         languageRow.Children.Add(languageLabel);

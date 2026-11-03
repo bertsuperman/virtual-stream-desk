@@ -18,6 +18,7 @@ internal sealed class HotkeyBox : TextBox
     public HotkeyBox()
     {
         IsReadOnly = true;
+        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center;
         Cursor = new Cursor(StandardCursorType.Hand);
         AddHandler(KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
         AddHandler(KeyUpEvent, (_, _) => UpdateText(), RoutingStrategies.Tunnel);

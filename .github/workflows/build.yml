@@ -129,8 +129,9 @@ jobs:
           git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Screenshots of ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-screens
 
+  # main → release "latest" (what installed apps update from); other branches → release "preview" (for testing only).
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push'
     needs: [windows, mac]
     runs-on: ubuntu-latest
     steps:
@@ -154,16 +155,17 @@ jobs:
           cat version.txt
           ls -la
 
-      - name: Update "latest" release
+      - name: Update release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest dist/VirtualStreamDeck.exe dist/VirtualStreamDeck-mac-arm64.zip dist/VirtualStreamDeck-mac-x64.zip dist/version.txt \
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then TAG=latest; TITLE="Najnovšia verzia ${VERSION}"; else TAG=preview; TITLE="Testovacia verzia ${VERSION} (${GITHUB_REF_NAME})"; fi
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" dist/VirtualStreamDeck.exe dist/VirtualStreamDeck-mac-arm64.zip dist/VirtualStreamDeck-mac-x64.zip dist/version.txt \
             --prerelease \
             --target ${{ github.sha }} \
-            --title "Najnovšia verzia ${VERSION}" \
+            --title "$TITLE" \
             --notes "Automaticky zostavené z commitu ${{ github.sha }}.
 
           **Windows:** stiahni VirtualStreamDeck.exe a spusti. Ak beží staršia verzia, nová ju sama nahradí.

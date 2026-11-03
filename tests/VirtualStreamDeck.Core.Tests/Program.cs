@@ -907,7 +907,7 @@ static class Tests
         Assert.True(info.HashOf("other.zip") == null, "unknown asset");
         Assert.True(Updater.ParseManifest($"0.2.8\n{h('a')}")!.HashOf(Updater.MacArm64Name) == null, "old manifest: exe only");
         Assert.Equal("/Applications/Virtual Stream Deck.app",
-            Updater.BundleOf("/Applications/Virtual Stream Deck.app/Contents/MacOS/VirtualStreamDeck"), "bundle of the executable");
+            Updater.BundleOf("/Applications/Virtual Stream Deck.app/Contents/MacOS/VirtualStreamDeck")?.Replace('\\', '/'), "bundle of the executable");
         Assert.True(Updater.BundleOf("/usr/local/bin/vsd") == null, "not in a bundle");
     }
 
