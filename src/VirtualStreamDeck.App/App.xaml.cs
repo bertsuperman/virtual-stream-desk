@@ -21,8 +21,11 @@ public partial class App : Application
         base.OnStartup(e);
         DispatcherUnhandledException += OnUnhandledException;
 
-        // A second launch only brings the running instance's window back.
-        if (!SingleInstance.TryAcquire(() => Dispatcher.InvokeAsync(() => _main?.ShowDeck())))
+        // Same build launched again: just show the running window.
+        // A different build (e.g. a newer download): the running one quits and this one takes over.
+        if (!SingleInstance.TryAcquire(
+                onShowRequest: () => Dispatcher.InvokeAsync(() => _main?.ShowDeck()),
+                onExitRequest: () => Dispatcher.InvokeAsync(ExitApp)))
         {
             Shutdown();
             return;
@@ -44,12 +47,13 @@ public partial class App : Application
         main.Show();
 
         _tray = new TrayIcon(
+            text: $"{AppInfo.ProductName} {AppInfo.Version}",
             toggleWindow: main.ToggleVisibility,
             openSettings: main.OpenSettings,
             exit: ExitApp);
 
         if (store.LastLoadWarning is { } warning)
-            MessageBox.Show(warning, "Virtual Stream Deck", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(warning, AppInfo.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     public void ExitApp()
@@ -58,6 +62,7 @@ public partial class App : Application
         _tray = null;
         _main?.CloseForExit();
         _obs?.Dispose();
+        SingleInstance.Release();
         Shutdown();
     }
 

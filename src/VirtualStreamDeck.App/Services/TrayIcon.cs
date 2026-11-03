@@ -8,7 +8,7 @@ internal sealed class TrayIcon : IDisposable
 {
     private readonly NotifyIcon _icon;
 
-    public TrayIcon(Action toggleWindow, Action openSettings, Action exit)
+    public TrayIcon(string text, Action toggleWindow, Action openSettings, Action exit)
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add("Zobraziť / skryť", null, (_, _) => toggleWindow());
@@ -18,7 +18,7 @@ internal sealed class TrayIcon : IDisposable
 
         _icon = new NotifyIcon
         {
-            Text = "Virtual Stream Deck",
+            Text = text.Length > 63 ? text[..63] : text, // NotifyIcon limit
             Icon = LoadIcon(),
             ContextMenuStrip = menu,
             Visible = true,

@@ -75,11 +75,12 @@ public partial class MainWindow : Window
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         // WS_EX_NOACTIVATE: clicking the deck never steals focus, so key combos
-        // go to the app the user is working in. WS_EX_TOOLWINDOW hides it from Alt+Tab.
+        // go to the app the user is working in. (Not a tool window: with ShowInTaskbar=False
+        // WPF gives it a hidden owner, which already keeps it out of the taskbar and Alt+Tab,
+        // and it can still get a real taskbar button while minimized.)
         var hwnd = new WindowInteropHelper(this).Handle;
         long ex = Win32.GetWindowLongPtr(hwnd, Win32.GWL_EXSTYLE).ToInt64();
-        Win32.SetWindowLongPtr(hwnd, Win32.GWL_EXSTYLE,
-            new IntPtr(ex | Win32.WS_EX_NOACTIVATE | Win32.WS_EX_TOOLWINDOW));
+        Win32.SetWindowLongPtr(hwnd, Win32.GWL_EXSTYLE, new IntPtr(ex | Win32.WS_EX_NOACTIVATE));
 
         _hotkeys = new HotkeyService(this);
         _hotkeys.Pressed += Press;
@@ -118,13 +119,31 @@ public partial class MainWindow : Window
     public void ShowDeck()
     {
         if (!IsVisible) Show();
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         KeepOnScreen();
     }
 
     public void ToggleVisibility()
     {
-        if (IsVisible) Hide();
+        if (IsVisible && WindowState != WindowState.Minimized) Hide();
         else ShowDeck();
+    }
+
+    /// <summary>Real minimize: the deck gets a taskbar button only while it is minimized.</summary>
+    private void Minimize_Click(object sender, RoutedEventArgs e)
+    {
+        ShowInTaskbar = true;
+        WindowState = WindowState.Minimized;
+    }
+
+    protected override void OnStateChanged(EventArgs e)
+    {
+        base.OnStateChanged(e);
+        if (WindowState != WindowState.Minimized && ShowInTaskbar)
+        {
+            ShowInTaskbar = false;
+            KeepOnScreen();
+        }
     }
 
     // ───────────────────────── grid ─────────────────────────

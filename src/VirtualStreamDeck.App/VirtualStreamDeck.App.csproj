@@ -13,7 +13,8 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Product>Virtual Stream Deck</Product>
-    <Version>0.1.0</Version>
+    <!-- CI overrides this with 0.2.<build number>; the running instance compares versions on startup. -->
+    <Version>0.2.0</Version>
     <!-- WPF0001: Fluent ThemeMode is marked experimental.
          WFO0003: WinForms wants DPI set in code; this is a WPF app, the manifest is the right place. -->
     <NoWarn>$(NoWarn);WPF0001;WFO0003</NoWarn>

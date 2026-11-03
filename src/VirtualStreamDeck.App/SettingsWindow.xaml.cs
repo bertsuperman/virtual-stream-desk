@@ -32,6 +32,7 @@ public partial class SettingsWindow : Window
         LabelsBox.IsChecked = s.ShowLabels;
         AutostartBox.IsChecked = s.StartWithWindows;
         UpdateHiddenInfo();
+        VersionText.Text = $"{AppInfo.ProductName} {AppInfo.Version}\n{deck.Store.Directory}";
 
         ObsHostBox.Text = s.Obs.Host;
         ObsPortBox.Text = s.Obs.Port.ToString();

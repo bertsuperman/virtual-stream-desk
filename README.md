@@ -9,8 +9,12 @@ Jednoduchý virtuálny streamdeck pre Windows 10/11. Malé okno s mriežkou tla�
 | Upraviť / vymazať | pravý klik na tlačidlo |
 | Presunúť | ťahaj tlačidlo na iné políčko (obsadené políčka sa vymenia) |
 | Presunúť okno | ťahaj za horný pruh |
-| Nastavenia | ozubené koliesko v hornom pruhu alebo ikona v lište (tray) |
-| Skryť | `–` v hornom pruhu; okno vrátiš klikom na ikonu v lište |
+| Nastavenia | ozubené koliesko v hornom pruhu alebo ikona v lište (tray); karty Všeobecné / Rozloženie / OBS |
+| Minimalizovať | `–` v hornom pruhu, okno sa schová na panel úloh |
+| Zavrieť do lišty | `×` v hornom pruhu, appka beží ďalej (hotkeys fungujú); späť klikom na ikonu v lište |
+| Ukončiť | pravý klik na ikonu v lište → Ukončiť |
+
+Keď spustíš novšiu verziu, kým stará beží v lište, nová ju sama ukončí a nahradí. Verziu nájdeš v Nastavenia → Všeobecné.
 
 Akcie: **Otvoriť** (program / súbor / priečinok / web), **Klávesová skratka** (pošle sa do aktívneho okna), **Médiá** (play/pauza, ďalšia, predošlá, stop, hlasitosť, mute), **OBS Studio** (viď nižšie).
 
