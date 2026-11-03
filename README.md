@@ -1,84 +1,68 @@
 # Virtual Stream Deck
 
-Jednoduchý virtuálny streamdeck pre Windows 10/11. Malé okno s mriežkou tlačidiel, ktoré nekradne focus, a globálne klávesové skratky, ktoré fungujú aj vtedy, keď je okno skryté.
+Jednoduchý virtuálny streamdeck pre **Windows 10/11 a macOS** (Apple Silicon aj Intel). Malé okno s mriežkou tlačidiel, globálne klávesové skratky, ktoré fungujú aj vtedy, keď je okno skryté, a ovládanie z mobilu cez QR kód.
+
+## ⬇ Stiahnuť
+| Systém | Súbor |
+|---|---|
+| Windows | [VirtualStreamDeck.exe](https://github.com/bertsuperman/virtual-stream-desk/releases/download/latest/VirtualStreamDeck.exe) |
+| Mac s Apple Silicon (M1–M4) | [VirtualStreamDeck-mac-arm64.zip](https://github.com/bertsuperman/virtual-stream-desk/releases/download/latest/VirtualStreamDeck-mac-arm64.zip) |
+| Mac s procesorom Intel | [VirtualStreamDeck-mac-x64.zip](https://github.com/bertsuperman/virtual-stream-desk/releases/download/latest/VirtualStreamDeck-mac-x64.zip) |
+
+**Windows:** spusti .exe, nič sa neinštaluje. Pri prvom spustení SmartScreen: *Ďalšie informácie → Spustiť aj tak*.
+
+**Mac:** rozbaľ zip a presuň *Virtual Stream Deck* do **Aplikácií** (z priečinka Stiahnuté by sa nevedel sám aktualizovať). Appka nie je podpísaná od Apple, takže pri prvom spustení ju Mac zablokuje: otvor *Nastavenia systému → Súkromie a bezpečnosť* a dole klikni na **Otvoriť aj tak**. Na posielanie kláves a ovládanie hlasitosti sa Mac raz opýta na povolenie **Prístupnosť**.
+
+Ďalšie verzie si appka stiahne sama: zelená šípka v pruhu s ikonami alebo *Nastavenia → Všeobecné → Aktualizovať*. Takto stiahnutá verzia sa spustí bez varovania SmartScreen / Gatekeeper.
 
 ## Ovládanie
 | Čo | Ako |
 |---|---|
-| Pridať tlačidlo | pretiahni program, odkaz, súbor, priečinok alebo URL z prehliadača na mriežku, alebo klikni na prázdne políčko |
+| Pridať tlačidlo | pretiahni program / appku, odkaz, súbor, priečinok alebo URL z prehliadača na mriežku, alebo klikni na prázdne políčko |
 | Upraviť / vymazať | pravý klik na tlačidlo |
 | Presunúť | ťahaj tlačidlo na iné políčko (obsadené políčka sa vymenia) |
-| Presunúť okno | ťahaj za horný pruh |
-| Nastavenia, profily, návod | lišta s ikonami vpravo od mriežky otvorí bočný panel (Profily, Rozloženie, Všeobecné, Mobil, OBS, Návod); šípka v paneli ho zbalí |
-| Prepnúť profil | ikona profilov → klik na profil; alebo tlačidlo s akciou Prepnúť profil; alebo z mobilu |
-| Presunúť okno | štandardne za titulok okna |
-| Minimalizovať | štandardné tlačidlo okna |
-| Schovať do lišty | klik na ikonu v lište (appka beží ďalej, hotkeys fungujú) |
-| Ukončiť | `×` okna (s potvrdením) alebo pravý klik na ikonu v lište → Ukončiť |
+| Nastavenia, profily, návod | pruh s ikonami otvorí bočný panel vľavo (Profily, Rozloženie, Všeobecné, Mobil, OBS, Návod); šípka ho zbalí |
+| Schovať / ukázať | klik na ikonu v lište vedľa hodín (Windows) / v lište s menu (Mac) |
+| Ukončiť | zatvorenie okna (s potvrdením) alebo ikona v lište → Ukončiť |
 
-Kým je bočný panel otvorený, deck sa správa ako bežné okno (dá sa doň písať). Po zbalení znova nekradne focus, takže skratky z tlačidiel idú do appky, v ktorej pracuješ.
+Akcie: **Otvoriť** (program / appka / súbor / priečinok / web), **Klávesová skratka** (pošle sa do appky, v ktorej pracuješ), **Médiá** (play/pauza, ďalšia, predošlá, stop, hlasitosť, mute), **OBS Studio**, **Prepnúť profil**.
 
-Keď spustíš novšiu verziu, kým stará beží v lište, nová ju sama ukončí a nahradí. Verziu nájdeš v Nastavenia → Všeobecné.
+Na Windowse okno decku nekradne focus. Mac to nedovolí, preto si appka pamätá, kde si naposledy pracoval, a pred odoslaním skratky sa tam vráti. Na Macu je modifikátor *Win* klávesa **⌘** a *Alt* je **⌥**.
 
-**Aktualizácie:** Stream Deck sa pri štarte a potom každých 6 hodín pozrie na GitHub. Keď je novšia verzia, v pravom pruhu sa objaví zelená šípka (alebo Nastavenia → Všeobecné → Aktualizovať). Novú verziu stiahne priamo appka, overí jej SHA-256 a nahradí ňou svoje .exe, takže Windows SmartScreen pri spustení nevaruje. Pôvodný súbor sa dočasne premenuje na `VirtualStreamDeck.exe.old` a pri ďalšom štarte sa vymaže. Automatickú kontrolu možno vypnúť v Nastavenia → Všeobecné.
-
-Akcie: **Otvoriť** (program / súbor / priečinok / web), **Klávesová skratka** (pošle sa do aktívneho okna), **Médiá** (play/pauza, ďalšia, predošlá, stop, hlasitosť, mute), **OBS Studio** (viď nižšie).
+Nový deck začína piatimi tlačidlami na zvuk (play/pauza, ďalšia, tichšie, hlasnejšie, stlmiť). Rovnakú sadu pridá *Profily → Profil so zvukom*. Appka je po slovensky aj anglicky (*Nastavenia → Všeobecné → Jazyk*), na mobile sa jazyk prepne tiež.
 
 ## Profily
-Každý profil má vlastnú mriežku (riadky × stĺpce) a vlastné tlačidlá. Veľkosť tlačidiel, medzery a popisky sú spoločné.
-- **Nastavenia → Profily:** nový, duplikovať, premenovať, vymazať, prepnúť (aj dvojklikom)
-- prepínanie: názov profilu v hornom pruhu, výber v mobile, alebo tlačidlo s akciou **Prepnúť profil** (ako priečinky na skutočnom Stream Decku)
-- globálne klávesové skratky patria k profilu, ten istý kláves môže v každom profile robiť niečo iné
-- staré konfigurácie sa pri prvom spustení presunú do profilu „Hlavný“
+Každý profil má vlastnú mriežku a tlačidlá; veľkosť tlačidiel, medzery a popisky sú spoločné. Prepínanie: bočný panel → Profily, výber v mobile alebo tlačidlo s akciou **Prepnúť profil** (ako priečinky na skutočnom Stream Decku). Globálne skratky patria k profilu.
 
 ## Ovládanie z mobilu
-1. **Nastavenia → Mobil** → zaškrtni *Povoliť ovládanie z mobilu*.
-2. Naskenuj QR kód fotoaparátom mobilu. Otvorí sa stránka s tvojou mriežkou, ťuknutie stlačí tlačidlo na PC.
-3. Pre celú obrazovku daj v prehliadači *Pridať na plochu* (alebo ⛶ vpravo hore).
-4. Deck je v mobile vždy na šírku: na výšku sa stránka sama otočí, stačí natočiť mobil. Vypnúť sa to dá ikonou ⟲.
+1. **Nastavenia → Mobil** → *Povoliť ovládanie z mobilu*.
+2. Naskenuj QR kód fotoaparátom mobilu. Ťuknutie stlačí tlačidlo na počítači.
+3. Pre celú obrazovku daj v prehliadači *Pridať na plochu* (iPhone: Zdieľať → Pridať na plochu, Android: ⋮ → Pridať na plochu). Ikona na ploche sa pripojí bez ďalšieho skenovania.
 
-Mobil musí byť v rovnakej Wi-Fi. Pri prvom zapnutí sa Windows môže opýtať na prístup do siete, povoľ súkromné siete. QR kód obsahuje tajný kľúč, bez neho sa nikto iný v sieti nepripojí. *Nový kód* všetky mobily odpojí. Server beží na porte 8765 (dá sa zmeniť) a nepoužíva HTTPS, je určený len do domácej siete.
+Mobil musí byť v rovnakej Wi-Fi. QR kód obsahuje tajný kľúč, *Nový kód* všetky mobily odpojí. Server beží na porte 8765 bez HTTPS, je určený do domácej siete.
 
 ## OBS Studio
-Ovládanie cez WebSocket server, ktorý má OBS 28+ zabudovaný, takže netreba žiadny plugin.
-
-1. V OBS: **Nástroje → Nastavenia WebSocket servera** → zaškrtni *Povoliť WebSocket server*. Cez *Zobraziť informácie o pripojení* skopíruj heslo.
-2. V Stream Decku: **Nastavenia → OBS Studio** → zadaj heslo (adresa `localhost`, port `4455`) → *Otestovať pripojenie*.
-3. V editore tlačidla vyber akciu **OBS Studio**. Scény a zdroje sa načítajú priamo z OBS.
-
-| Príkaz | Čo robí |
-|---|---|
-| Prepnúť scénu | prepne program na zvolenú scénu |
-| Zapnúť / vypnúť nahrávanie | ToggleRecord |
-| Zapnúť / vypnúť stream | ToggleStream |
-| Stlmiť / zapnúť zvuk zdroja | napr. mikrofón alebo zvuk z plochy |
-| Zobraziť / skryť zdroj | napr. webkameru v scéne (prázdna scéna = aktuálna) |
-| Uložiť replay | uloží replay buffer (musí byť v OBS zapnutý) |
-
-Appka sa k OBS pripojí pri prvom stlačení OBS tlačidla a spojenie drží. Keď sa OBS reštartuje, pri ďalšom stlačení sa pripojí znova.
+1. V OBS: **Nástroje → Nastavenia WebSocket servera** → *Povoliť WebSocket server*, skopíruj heslo.
+2. V Stream Decku: **Nastavenia → OBS** → heslo (adresa `localhost`, port `4455`) → *Otestovať pripojenie*.
+3. V editore tlačidla vyber akciu **OBS Studio**: prepnúť scénu, nahrávanie, stream, stlmiť zdroj, zobraziť/skryť zdroj, uložiť replay.
 
 ## Zostavenie
-Treba [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). Potom v PowerShelli:
+Treba [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 
-```powershell
-./build.ps1
+```bash
+dotnet run --project tests/VirtualStreamDeck.Core.Tests        # testy jadra
+dotnet run --project src/VirtualStreamDeck.App                 # spustí appku (Windows, Mac, Linux na vývoj)
+dotnet run --project src/VirtualStreamDeck.App -- --screenshots shots   # vyrenderuje okná do PNG bez obrazovky
 ```
 
-Výsledok je `publish\VirtualStreamDeck.exe`: jeden súbor, netreba nič inštalovať. Pri každom pushnutí ho zostaví aj GitHub Actions (`.github/workflows/build.yml`). Push do `main` navyše aktualizuje release **latest**, odkiaľ sa dá .exe priamo stiahnuť.
-
-Na vývoj stačí otvoriť `VirtualStreamDeck.sln` vo Visual Studiu alebo Rideri.
+GitHub Actions (`.github/workflows/build.yml`) pri každom pushi zostaví Windows .exe, Mac .app pre arm64 aj x64 (ad-hoc podpis, zip) a screenshoty UI (vetva `ci-screens`). Push do `main` aktualizuje release **latest** (odtiaľ sa aktualizujú nainštalované appky), iné vetvy release **preview** na testovanie.
 
 ## Konfigurácia
-`%AppData%\VirtualStreamDeck\config.json` a priečinok `icons\`. Ak leží `config.json` vedľa .exe, appka beží v portable režime a použije ten. Formát je popísaný v project knowledge (`03-konfiguracia-a-akcie.md`). Pokazený config sa zálohuje ako `config.broken-*.json` a appka začne nanovo. Neočakávané chyby sa zapisujú do `error.log`.
+Windows: `%AppData%\VirtualStreamDeck\`, Mac: `~/Library/Application Support/VirtualStreamDeck/` – `config.json` a priečinok `icons/`. Na Windowse platí portable režim: ak leží `config.json` vedľa .exe, použije sa ten. Pokazený config sa zálohuje ako `config.broken-*.json`, neočakávané chyby sa zapisujú do `error.log`.
 
 ## Štruktúra
 ```
-src/VirtualStreamDeck.Core/    model, config, skratky, vykonávanie akcií (bez WPF; neskôr ho použije aj server pre mobil)
-src/VirtualStreamDeck.App/     WPF: hlavné okno, editor tlačidla, nastavenia, tray, globálne hotkeys, ikony
-tests/VirtualStreamDeck.Core.Tests/   testy Core (dotnet run, bez NuGet závislostí)
+src/VirtualStreamDeck.Core/     model, config, skratky, akcie (Windows/ a Mac/), OBS, server pre mobil, QR, aktualizácie
+src/VirtualStreamDeck.App/      Avalonia UI v C# (UI/), systémové služby (Services/): skratky, focus, lišta, autostart, ikony
+tests/VirtualStreamDeck.Core.Tests/   testy jadra (dotnet run, bez NuGet závislostí)
 ```
-
-## Známe obmedzenia
-- Do aplikácií spustených ako správca nevie poslať klávesy (ochrana Windows / UIPI). Riešenie je spustiť ako správca aj Stream Deck.
-- Systémové skratky (Win+L, Ctrl+Alt+Del) sa zaregistrovať nedajú.
-- Samostatný kláves bez Ctrl/Alt/Shift (napr. F13) prestane fungovať normálne, kým appka beží.
