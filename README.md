@@ -12,7 +12,25 @@ Jednoduchý virtuálny streamdeck pre Windows 10/11. Malé okno s mriežkou tla�
 | Nastavenia | ozubené koliesko v hornom pruhu alebo ikona v lište (tray) |
 | Skryť | `–` v hornom pruhu; okno vrátiš klikom na ikonu v lište |
 
-Akcie: **Otvoriť** (program / súbor / priečinok / web), **Klávesová skratka** (pošle sa do aktívneho okna), **Médiá** (play/pauza, ďalšia, predošlá, stop, hlasitosť, mute).
+Akcie: **Otvoriť** (program / súbor / priečinok / web), **Klávesová skratka** (pošle sa do aktívneho okna), **Médiá** (play/pauza, ďalšia, predošlá, stop, hlasitosť, mute), **OBS Studio** (viď nižšie).
+
+## OBS Studio
+Ovládanie cez WebSocket server, ktorý má OBS 28+ zabudovaný, takže netreba žiadny plugin.
+
+1. V OBS: **Nástroje → Nastavenia WebSocket servera** → zaškrtni *Povoliť WebSocket server*. Cez *Zobraziť informácie o pripojení* skopíruj heslo.
+2. V Stream Decku: **Nastavenia → OBS Studio** → zadaj heslo (adresa `localhost`, port `4455`) → *Otestovať pripojenie*.
+3. V editore tlačidla vyber akciu **OBS Studio**. Scény a zdroje sa načítajú priamo z OBS.
+
+| Príkaz | Čo robí |
+|---|---|
+| Prepnúť scénu | prepne program na zvolenú scénu |
+| Zapnúť / vypnúť nahrávanie | ToggleRecord |
+| Zapnúť / vypnúť stream | ToggleStream |
+| Stlmiť / zapnúť zvuk zdroja | napr. mikrofón alebo zvuk z plochy |
+| Zobraziť / skryť zdroj | napr. webkameru v scéne (prázdna scéna = aktuálna) |
+| Uložiť replay | uloží replay buffer (musí byť v OBS zapnutý) |
+
+Appka sa k OBS pripojí pri prvom stlačení OBS tlačidla a spojenie drží. Keď sa OBS reštartuje, pri ďalšom stlačení sa pripojí znova.
 
 ## Zostavenie
 Treba [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). Potom v PowerShelli:

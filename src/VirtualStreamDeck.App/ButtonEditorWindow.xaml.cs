@@ -1,11 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
 using VirtualStreamDeck.App.Services;
 using VirtualStreamDeck.Core;
+using VirtualStreamDeck.Core.Obs;
 
 namespace VirtualStreamDeck.App;
 
@@ -19,15 +22,27 @@ public partial class ButtonEditorWindow : Window
         MediaCommand.VolumeUp, MediaCommand.VolumeDown, MediaCommand.Mute,
     };
 
+    private static readonly ObsCommand[] ObsCommands =
+    {
+        ObsCommand.SwitchScene, ObsCommand.ToggleRecord, ObsCommand.ToggleStream,
+        ObsCommand.ToggleMute, ObsCommand.ToggleSource, ObsCommand.SaveReplay,
+    };
+
+    private readonly ObsClient _obs;
+    private bool _obsLoaded;
+    private bool _settingObsItems;
+    private int _obsLoadVersion;
+
     private readonly DeckConfig _config;
     private readonly DeckButton? _existing;
     private readonly int _row, _col;
     private readonly IconService _icons;
     private string? _icon;
 
-    internal ButtonEditorWindow(DeckConfig config, DeckButton? existing, int row, int col, IconService icons)
+    internal ButtonEditorWindow(DeckConfig config, DeckButton? existing, int row, int col, IconService icons, ObsClient obs)
     {
         InitializeComponent();
+        _obs = obs;
         _config = config;
         _existing = existing;
         _row = row;
@@ -37,6 +52,9 @@ public partial class ButtonEditorWindow : Window
         foreach (var cmd in MediaCommands)
             MediaBox.Items.Add(new ComboBoxItem { Content = MainWindow.MediaName(cmd), Tag = cmd });
         MediaBox.SelectedIndex = 0;
+        foreach (var cmd in ObsCommands)
+            ObsCommandBox.Items.Add(new ComboBoxItem { Content = MainWindow.ObsName(cmd), Tag = cmd });
+        ObsCommandBox.SelectedIndex = 0;
 
         Title = existing == null ? "Nové tlačidlo" : "Upraviť tlačidlo";
         DeleteButton.Visibility = existing == null ? Visibility.Collapsed : Visibility.Visible;
@@ -53,6 +71,12 @@ public partial class ButtonEditorWindow : Window
             case MediaAction m:
                 SelectActionType("media");
                 MediaBox.SelectedIndex = Math.Max(0, Array.IndexOf(MediaCommands, m.Command));
+                break;
+            case ObsAction ob:
+                ObsCommandBox.SelectedIndex = Math.Max(0, Array.IndexOf(ObsCommands, ob.Command));
+                ObsSceneBox.Text = ob.Scene ?? "";
+                ObsSourceBox.Text = ob.Source ?? "";
+                SelectActionType("obs");
                 break;
             case OpenAction o:
                 SelectActionType("open");
@@ -102,11 +126,100 @@ public partial class ButtonEditorWindow : Window
     private void UpdateActionPanels()
     {
         // SelectionChanged can fire during InitializeComponent, before the panels exist.
-        if (OpenPanel == null || KeysPanel == null || MediaPanel == null) return;
+        if (OpenPanel == null || KeysPanel == null || MediaPanel == null || ObsPanel == null) return;
         var type = SelectedActionType;
         OpenPanel.Visibility = type == "open" ? Visibility.Visible : Visibility.Collapsed;
         KeysPanel.Visibility = type == "keys" ? Visibility.Visible : Visibility.Collapsed;
         MediaPanel.Visibility = type == "media" ? Visibility.Visible : Visibility.Collapsed;
+        ObsPanel.Visibility = type == "obs" ? Visibility.Visible : Visibility.Collapsed;
+
+        if (type == "obs")
+        {
+            UpdateObsRows();
+            if (!_obsLoaded) _ = LoadObsListsAsync();
+        }
+    }
+
+    // ───────────────────────── OBS ─────────────────────────
+
+    private ObsCommand SelectedObsCommand =>
+        (ObsCommandBox.SelectedItem as ComboBoxItem)?.Tag is ObsCommand c ? c : ObsCommand.SwitchScene;
+
+    private void ObsCommandBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ObsSceneRow == null || ObsPanel == null) return; // during InitializeComponent
+        UpdateObsRows();
+        if (_obsLoaded) _ = LoadObsListsAsync(); // the source list depends on the command
+    }
+
+    private void ObsSceneBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_settingObsItems || ObsSourceRow == null) return;
+        if (SelectedObsCommand == ObsCommand.ToggleSource && _obsLoaded)
+        {
+            // Show the sources of the newly picked scene (after the text box has been updated).
+            Dispatcher.InvokeAsync(() => _ = LoadObsListsAsync());
+        }
+    }
+
+    private void ObsRefresh_Click(object sender, RoutedEventArgs e) => _ = LoadObsListsAsync();
+
+    private void UpdateObsRows()
+    {
+        var cmd = SelectedObsCommand;
+        bool scene = cmd is ObsCommand.SwitchScene or ObsCommand.ToggleSource;
+        bool source = cmd is ObsCommand.ToggleMute or ObsCommand.ToggleSource;
+        ObsSceneRow.Visibility = scene ? Visibility.Visible : Visibility.Collapsed;
+        ObsSourceRow.Visibility = source ? Visibility.Visible : Visibility.Collapsed;
+        ObsRefreshRow.Visibility = scene || source ? Visibility.Visible : Visibility.Collapsed;
+        ObsSceneLabel.Text = cmd == ObsCommand.ToggleSource ? "Scéna (prázdne = aktuálna scéna)" : "Scéna";
+        ObsSourceLabel.Text = cmd == ObsCommand.ToggleMute ? "Zdroj zvuku" : "Zdroj";
+    }
+
+    /// <summary>Fills the scene / source drop-downs from the running OBS. Names can always be typed by hand.</summary>
+    private async Task LoadObsListsAsync()
+    {
+        int version = ++_obsLoadVersion;
+        ObsStatus.ClearValue(TextBlock.ForegroundProperty);
+        ObsStatus.Text = "Načítavam z OBS…";
+        try
+        {
+            var cmd = SelectedObsCommand;
+            var scenes = await _obs.GetScenesAsync();
+            IReadOnlyList<string> sources = cmd switch
+            {
+                ObsCommand.ToggleMute => await _obs.GetInputsAsync(),
+                ObsCommand.ToggleSource => await _obs.GetSceneSourcesAsync(ObsSceneBox.Text.Trim()),
+                _ => Array.Empty<string>(),
+            };
+            if (version != _obsLoadVersion) return;
+
+            SetObsItems(ObsSceneBox, scenes);
+            SetObsItems(ObsSourceBox, sources);
+            _obsLoaded = true;
+            ObsStatus.Text = $"Načítané z OBS ({scenes.Count} scén).";
+        }
+        catch (Exception ex)
+        {
+            if (version != _obsLoadVersion) return;
+            ObsStatus.Foreground = WarningBrush;
+            ObsStatus.Text = ex.Message + " Názov môžeš napísať aj ručne.";
+        }
+    }
+
+    private void SetObsItems(ComboBox box, IReadOnlyList<string> items)
+    {
+        _settingObsItems = true;
+        try
+        {
+            var text = box.Text;
+            box.ItemsSource = items;
+            box.Text = text;
+        }
+        finally
+        {
+            _settingObsItems = false;
+        }
     }
 
     // ───────────────────────── open target ─────────────────────────
@@ -245,6 +358,28 @@ public partial class ButtonEditorWindow : Window
                 action = new KeysAction { Keys = keys.ToString() };
                 break;
 
+            case "obs":
+                var obsCmd = SelectedObsCommand;
+                var scene = ObsSceneBox.Text.Trim();
+                var source = ObsSourceBox.Text.Trim();
+                if (obsCmd == ObsCommand.SwitchScene && scene.Length == 0)
+                {
+                    Warn("Vyber scénu, na ktorú sa má OBS prepnúť.");
+                    return;
+                }
+                if (obsCmd is ObsCommand.ToggleMute or ObsCommand.ToggleSource && source.Length == 0)
+                {
+                    Warn("Vyber zdroj, ktorý má tlačidlo ovládať.");
+                    return;
+                }
+                action = new ObsAction
+                {
+                    Command = obsCmd,
+                    Scene = obsCmd is ObsCommand.SwitchScene or ObsCommand.ToggleSource && scene.Length > 0 ? scene : null,
+                    Source = obsCmd is ObsCommand.ToggleMute or ObsCommand.ToggleSource ? source : null,
+                };
+                break;
+
             case "media":
                 var cmd = (MediaBox.SelectedItem as ComboBoxItem)?.Tag is MediaCommand c ? c : MediaCommand.PlayPause;
                 action = new MediaAction { Command = cmd };
@@ -284,13 +419,24 @@ public partial class ButtonEditorWindow : Window
             Id = _existing?.Id ?? DeckButton.NewId(),
             Row = _row,
             Col = _col,
-            Label = string.IsNullOrWhiteSpace(LabelBox.Text) ? null : LabelBox.Text.Trim(),
+            Label = string.IsNullOrWhiteSpace(LabelBox.Text) ? DefaultLabel(action) : LabelBox.Text.Trim(),
             Icon = _icon,
             Hotkey = hotkey?.ToString(),
             Action = action,
         };
         DialogResult = true;
     }
+
+    /// <summary>A sensible label when the user leaves it empty (mostly for OBS buttons, which have no icon).</summary>
+    private static string? DefaultLabel(DeckAction action) => action switch
+    {
+        ObsAction { Command: ObsCommand.SwitchScene } o => o.Scene,
+        ObsAction { Command: ObsCommand.ToggleMute or ObsCommand.ToggleSource } o => o.Source,
+        ObsAction { Command: ObsCommand.ToggleRecord } => "REC",
+        ObsAction { Command: ObsCommand.ToggleStream } => "LIVE",
+        ObsAction { Command: ObsCommand.SaveReplay } => "Replay",
+        _ => null,
+    };
 
     private void Delete_Click(object sender, RoutedEventArgs e)
     {

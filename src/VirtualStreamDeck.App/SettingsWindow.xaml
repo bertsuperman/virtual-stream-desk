@@ -69,6 +69,32 @@
         <CheckBox x:Name="LabelsBox" Content="Zobrazovať popisky pod ikonami" Margin="0,0,0,4" />
         <CheckBox x:Name="AutostartBox" Content="Spustiť so systémom Windows" Margin="0,0,0,20" />
 
+        <TextBlock Text="OBS Studio" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <TextBlock FontSize="12" Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,10"
+                   Text="V OBS zapni Nástroje → Nastavenia WebSocket servera → Povoliť WebSocket server. Heslo skopíruješ cez „Zobraziť informácie o pripojení“." />
+        <Grid Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="140" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="80" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Text="Adresa a port" Style="{StaticResource FieldLabel}" />
+            <TextBox Grid.Column="1" x:Name="ObsHostBox" />
+            <TextBlock Grid.Column="2" Text=":" VerticalAlignment="Center" Margin="6,0" />
+            <TextBox Grid.Column="3" x:Name="ObsPortBox" />
+            <TextBlock Grid.Row="1" Text="Heslo" Style="{StaticResource FieldLabel}" Margin="0,10,0,0" />
+            <PasswordBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" x:Name="ObsPasswordBox" Margin="0,10,0,0" />
+        </Grid>
+        <DockPanel Margin="0,0,0,20">
+            <Button DockPanel.Dock="Left" Content="Otestovať pripojenie" Click="ObsTest_Click" />
+            <TextBlock x:Name="ObsStatus" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" FontSize="12" />
+        </DockPanel>
+
         <DockPanel LastChildFill="False">
             <Button DockPanel.Dock="Left" Content="Otvoriť priečinok s nastaveniami" Click="OpenFolder_Click" />
             <Button DockPanel.Dock="Right" Content="Zavrieť" IsCancel="True" IsDefault="True" MinWidth="90" />

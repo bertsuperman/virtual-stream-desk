@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using VirtualStreamDeck.App.Services;
 using VirtualStreamDeck.Core;
+using VirtualStreamDeck.Core.Obs;
 
 namespace VirtualStreamDeck.App;
 
@@ -30,6 +31,7 @@ public partial class MainWindow : Window
     private static readonly Brush HeaderTextBrush = Frozen(0x5F, 0x5F, 0x68);
 
     private readonly Deck _deck;
+    private readonly ObsClient _obs;
     private readonly IconService _icons;
     private readonly Dictionary<string, Border> _tiles = new();
     private HotkeyService? _hotkeys;
@@ -47,10 +49,11 @@ public partial class MainWindow : Window
 
     private int _statusVersion;
 
-    public MainWindow(Deck deck)
+    internal MainWindow(Deck deck, ObsClient obs)
     {
         InitializeComponent();
         _deck = deck;
+        _obs = obs;
         _icons = new IconService(deck.Store);
 
         var pos = deck.Config.Settings.Window;
@@ -180,7 +183,7 @@ public partial class MainWindow : Window
         TextBlock? emptyGlyph = null;
         if (button == null)
         {
-            emptyGlyph = Glyph("", size * 0.28, EmptyGlyphBrush);
+            emptyGlyph = Glyph("\uE710", size * 0.28, EmptyGlyphBrush);
             emptyGlyph.Opacity = 0;
             content = emptyGlyph;
         }
@@ -337,23 +340,33 @@ public partial class MainWindow : Window
 
     private static string DefaultGlyph(DeckAction? action) => action switch
     {
-        OpenAction o when o.IsUrl => "",                                    // Globe
-        OpenAction o when Directory.Exists(Expand(o.Target)) => "",         // Folder
-        OpenAction o when IsProgram(o.Target) => "",                        // App
-        OpenAction => "",                                                   // Document
-        KeysAction => "",                                                   // Keyboard
+        OpenAction o when o.IsUrl => "\uE774",                                    // Globe
+        OpenAction o when Directory.Exists(Expand(o.Target)) => "\uE8B7",         // Folder
+        OpenAction o when IsProgram(o.Target) => "\uE71D",                        // App
+        OpenAction => "\uE8A5",                                                   // Document
+        KeysAction => "\uE765",                                                   // Keyboard
         MediaAction m => m.Command switch
         {
-            MediaCommand.PlayPause => "",
-            MediaCommand.Next => "",
-            MediaCommand.Prev => "",
-            MediaCommand.Stop => "",
-            MediaCommand.VolumeUp => "",
-            MediaCommand.VolumeDown => "",
-            MediaCommand.Mute => "",
-            _ => "",
+            MediaCommand.PlayPause => "\uE768",
+            MediaCommand.Next => "\uE893",
+            MediaCommand.Prev => "\uE892",
+            MediaCommand.Stop => "\uE71A",
+            MediaCommand.VolumeUp => "\uE995",
+            MediaCommand.VolumeDown => "\uE993",
+            MediaCommand.Mute => "\uE74F",
+            _ => "\uE767",
         },
-        _ => "",
+        ObsAction o => o.Command switch
+        {
+            ObsCommand.SwitchScene => "\uE7F4",   // TV monitor
+            ObsCommand.ToggleRecord => "\uE7C8",  // Record
+            ObsCommand.ToggleStream => "\uE93E",  // Streaming
+            ObsCommand.ToggleMute => "\uE720",    // Microphone
+            ObsCommand.ToggleSource => "\uE7B3",  // Eye
+            ObsCommand.SaveReplay => "\uE74E",    // Save
+            _ => "\uE714",
+        },
+        _ => "\uE710",
     };
 
     private static string Expand(string path) => Environment.ExpandEnvironmentVariables(path.Trim().Trim('"'));
@@ -385,7 +398,25 @@ public partial class MainWindow : Window
         OpenAction o => "Otvoriť: " + o.Target,
         KeysAction k => "Poslať skratku: " + k.Keys,
         MediaAction m => MediaName(m.Command),
+        ObsAction o => "OBS: " + ObsName(o.Command) + o.Command switch
+        {
+            ObsCommand.SwitchScene => $" „{o.Scene}“",
+            ObsCommand.ToggleMute => $" „{o.Source}“",
+            ObsCommand.ToggleSource => $" „{o.Source}“" + (string.IsNullOrWhiteSpace(o.Scene) ? "" : $" v scéne „{o.Scene}“"),
+            _ => "",
+        },
         _ => "Bez akcie",
+    };
+
+    internal static string ObsName(ObsCommand c) => c switch
+    {
+        ObsCommand.SwitchScene => "Prepnúť scénu",
+        ObsCommand.ToggleRecord => "Zapnúť / vypnúť nahrávanie",
+        ObsCommand.ToggleStream => "Zapnúť / vypnúť stream",
+        ObsCommand.ToggleMute => "Stlmiť / zapnúť zvuk zdroja",
+        ObsCommand.ToggleSource => "Zobraziť / skryť zdroj",
+        ObsCommand.SaveReplay => "Uložiť replay",
+        _ => c.ToString(),
     };
 
     internal static string MediaName(MediaCommand c) => c switch
@@ -577,7 +608,7 @@ public partial class MainWindow : Window
         try
         {
             var existing = _deck.Config.GetAt(row, col);
-            var dialog = new ButtonEditorWindow(_deck.Config, existing, row, col, _icons) { Owner = this };
+            var dialog = new ButtonEditorWindow(_deck.Config, existing, row, col, _icons, _obs) { Owner = this };
             if (dialog.ShowDialog() == true)
             {
                 if (dialog.DeleteRequested && existing != null)
@@ -612,7 +643,7 @@ public partial class MainWindow : Window
         _dialogOpen = true;
         try
         {
-            new SettingsWindow(_deck) { Owner = this }.ShowDialog();
+            new SettingsWindow(_deck, _obs) { Owner = this }.ShowDialog();
         }
         finally
         {

@@ -4,7 +4,8 @@ namespace VirtualStreamDeck.Core;
 
 public sealed class DeckConfig
 {
-    public const int CurrentVersion = 1;
+    /// <summary>2 = added the "obs" action type and settings.obs.</summary>
+    public const int CurrentVersion = 2;
 
     public int Version { get; set; } = CurrentVersion;
     public DeckSettings Settings { get; set; } = new();
@@ -88,13 +89,33 @@ public sealed class DeckSettings
     public bool ShowLabels { get; set; } = true;
     public bool StartWithWindows { get; set; }
     public WindowPosition? Window { get; set; }
+    public ObsSettings Obs { get; set; } = new();
 
     public void Normalize()
     {
+        Obs ??= new ObsSettings();
+        Obs.Normalize();
         Rows = Math.Clamp(Rows, MinRows, MaxRows);
         Columns = Math.Clamp(Columns, MinColumns, MaxColumns);
         ButtonSize = Math.Clamp(ButtonSize, MinButtonSize, MaxButtonSize);
         Spacing = Math.Clamp(Spacing, MinSpacing, MaxSpacing);
+    }
+}
+
+/// <summary>Connection to the OBS WebSocket server (OBS → Tools → WebSocket Server Settings).</summary>
+public sealed class ObsSettings
+{
+    public string Host { get; set; } = "localhost";
+    public int Port { get; set; } = 4455;
+
+    /// <summary>Stored in plain text in config.json, like OBS stores it in its own config.</summary>
+    public string Password { get; set; } = "";
+
+    public void Normalize()
+    {
+        Host = string.IsNullOrWhiteSpace(Host) ? "localhost" : Host.Trim();
+        Port = Port is > 0 and <= 65535 ? Port : 4455;
+        Password ??= "";
     }
 }
 
@@ -126,6 +147,7 @@ public sealed class DeckButton
 [JsonDerivedType(typeof(OpenAction), "open")]
 [JsonDerivedType(typeof(KeysAction), "keys")]
 [JsonDerivedType(typeof(MediaAction), "media")]
+[JsonDerivedType(typeof(ObsAction), "obs")]
 public abstract class DeckAction
 {
 }
@@ -174,4 +196,26 @@ public sealed class MediaAction : DeckAction
         MediaCommand.Mute => 0xAD,
         _ => throw new ArgumentOutOfRangeException(nameof(Command)),
     };
+}
+
+public enum ObsCommand
+{
+    SwitchScene,
+    ToggleRecord,
+    ToggleStream,
+    ToggleMute,
+    ToggleSource,
+    SaveReplay,
+}
+
+/// <summary>Controls OBS through its built-in WebSocket server.</summary>
+public sealed class ObsAction : DeckAction
+{
+    public ObsCommand Command { get; set; }
+
+    /// <summary>SwitchScene: target scene. ToggleSource: scene containing the source (null = current scene).</summary>
+    public string? Scene { get; set; }
+
+    /// <summary>ToggleMute: audio source. ToggleSource: source to show/hide.</summary>
+    public string? Source { get; set; }
 }

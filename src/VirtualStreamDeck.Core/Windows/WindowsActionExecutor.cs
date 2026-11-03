@@ -1,27 +1,34 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.Versioning;
+using VirtualStreamDeck.Core.Obs;
 
 namespace VirtualStreamDeck.Core.Windows;
 
 [SupportedOSPlatform("windows")]
 public sealed class WindowsActionExecutor : IActionExecutor
 {
-    public void Execute(DeckAction action)
+    private readonly ObsClient _obs;
+
+    public WindowsActionExecutor(ObsClient obs) => _obs = obs;
+
+    public Task ExecuteAsync(DeckAction action)
     {
         switch (action)
         {
             case OpenAction open:
                 Open(open);
-                break;
+                return Task.CompletedTask;
             case KeysAction keys:
                 if (!Hotkey.TryParse(keys.Keys, out var hk))
                     throw new InvalidOperationException($"Neplatná klávesová skratka: '{keys.Keys}'.");
                 NativeInput.SendChord(hk);
-                break;
+                return Task.CompletedTask;
             case MediaAction media:
                 NativeInput.TapKey(media.VirtualKey);
-                break;
+                return Task.CompletedTask;
+            case ObsAction obs:
+                return _obs.ExecuteAsync(obs);
             default:
                 throw new InvalidOperationException("Neznámy typ akcie.");
         }

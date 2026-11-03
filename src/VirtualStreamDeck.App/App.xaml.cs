@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Threading;
 using VirtualStreamDeck.App.Services;
 using VirtualStreamDeck.Core;
+using VirtualStreamDeck.Core.Obs;
 using VirtualStreamDeck.Core.Windows;
 
 namespace VirtualStreamDeck.App;
@@ -11,6 +12,7 @@ namespace VirtualStreamDeck.App;
 public partial class App : Application
 {
     private Deck? _deck;
+    private ObsClient? _obs;
     private MainWindow? _main;
     private TrayIcon? _tray;
 
@@ -27,13 +29,17 @@ public partial class App : Application
         }
 
         var store = new ConfigStore(ConfigStore.ResolveDirectory(AppContext.BaseDirectory));
-        _deck = new Deck(store, new WindowsActionExecutor());
+        var obs = new ObsClient();
+        _obs = obs;
+        _deck = new Deck(store, new WindowsActionExecutor(obs));
         _deck.Load();
+        obs.Configure(_deck.Config.Settings.Obs);
+        _deck.Changed += (_, _) => obs.Configure(_deck.Config.Settings.Obs);
 
         // Keep the autostart entry pointing at the current exe location.
         if (_deck.Config.Settings.StartWithWindows) AutoStart.Set(true);
 
-        var main = new MainWindow(_deck);
+        var main = new MainWindow(_deck, obs);
         _main = main;
         main.Show();
 
@@ -51,6 +57,7 @@ public partial class App : Application
         _tray?.Dispose();
         _tray = null;
         _main?.CloseForExit();
+        _obs?.Dispose();
         Shutdown();
     }
 

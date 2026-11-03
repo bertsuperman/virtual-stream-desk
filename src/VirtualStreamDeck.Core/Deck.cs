@@ -3,7 +3,7 @@ namespace VirtualStreamDeck.Core;
 public interface IActionExecutor
 {
     /// <summary>Runs the action. Throws with a user-friendly message on failure.</summary>
-    void Execute(DeckAction action);
+    Task ExecuteAsync(DeckAction action);
 }
 
 public readonly record struct PressResult(bool Success, string? Error)
@@ -59,11 +59,11 @@ public sealed class Deck
 
         var action = button.Action;
         // Actions may wait for the user to release modifier keys, so never run them on the UI thread.
-        return Task.Run(() =>
+        return Task.Run(async () =>
         {
             try
             {
-                _executor.Execute(action);
+                await _executor.ExecuteAsync(action);
                 return PressResult.Ok;
             }
             catch (Exception ex)

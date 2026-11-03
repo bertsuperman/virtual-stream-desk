@@ -1,6 +1,8 @@
 #pragma warning disable CA1416 // NativeInput is Windows-only; the test only measures a struct.
 using System.Reflection;
+using System.Text.Json.Nodes;
 using VirtualStreamDeck.Core;
+using VirtualStreamDeck.Core.Obs;
 
 // Tiny test runner without NuGet dependencies. Every public static void method of Tests is a test.
 int failed = 0, passed = 0;
@@ -13,10 +15,11 @@ foreach (var m in typeof(Tests).GetMethods(BindingFlags.Public | BindingFlags.St
         passed++;
         Console.WriteLine($"  ok    {m.Name}");
     }
-    catch (TargetInvocationException ex)
+    catch (Exception ex)
     {
         failed++;
-        Console.WriteLine($"  FAIL  {m.Name}: {ex.InnerException?.Message}");
+        var inner = ex is TargetInvocationException t ? t.InnerException ?? ex : ex;
+        Console.WriteLine($"  FAIL  {m.Name}: {inner.Message}");
     }
 }
 Console.WriteLine($"\n{passed} passed, {failed} failed");
@@ -303,13 +306,144 @@ static class Tests
         Assert.Equal(expected, VirtualStreamDeck.Core.Windows.NativeInput.InputStructSize, "sizeof(INPUT)");
     }
 
+    // ───────── OBS ─────────
+
+    public static void Obs_AuthenticationMatchesProtocolExample()
+    {
+        // Example from the obs-websocket protocol documentation.
+        Assert.Equal("1Ct943GAT+6YQUUX47Ia/ncufilbe6+oD6lY+5kaCu4=",
+            ObsClient.ComputeAuthentication("supersecretpassword",
+                "lM1GncleQOaCu9lT1yeUZhFYnqhsLLP1G5lAGo3ixaI=",
+                "+IxH4CnCiqpX1rM9scsNynZzbOe4KhDeYcTNS3PDaeY="));
+    }
+
+    public static void Obs_ActionAndSettingsRoundTrip()
+    {
+        var c = new DeckConfig();
+        c.Settings.Obs = new ObsSettings { Host = "  ", Port = 0, Password = "x" };
+        c.Settings.Normalize();
+        Assert.Equal(("localhost", 4455), (c.Settings.Obs.Host, c.Settings.Obs.Port), "obs settings normalized");
+        c.Buttons.Add(new DeckButton { Action = new ObsAction { Command = ObsCommand.ToggleSource, Source = "Webcam" } });
+        var json = ConfigStore.Serialize(c);
+        Assert.True(json.Contains("\"type\": \"obs\"") && json.Contains("\"command\": \"toggleSource\""), "json");
+        Assert.True(ConfigStore.Deserialize(json).Buttons[0].Action is ObsAction { Command: ObsCommand.ToggleSource, Source: "Webcam", Scene: null }, "back");
+        Assert.True(ConfigStore.Deserialize("{\"settings\":{}}").Settings.Obs.Port == 4455, "old config without obs section");
+    }
+
+    public static async Task Obs_SwitchSceneAgainstFakeServer()
+    {
+        using var server = new FakeObsServer("heslo");
+        using var obs = new ObsClient();
+        obs.Configure(new ObsSettings { Host = "127.0.0.1", Port = server.Port, Password = "heslo" });
+
+        await obs.ExecuteAsync(new ObsAction { Command = ObsCommand.SwitchScene, Scene = "Pauza" });
+        await obs.ExecuteAsync(new ObsAction { Command = ObsCommand.ToggleRecord });
+        Assert.True(server.Requests.TryDequeue(out var r1) && r1.Type == "SetCurrentProgramScene" &&
+                    r1.Data?["sceneName"]?.GetValue<string>() == "Pauza", "scene request");
+        Assert.True(server.Requests.TryDequeue(out var r2) && r2.Type == "ToggleRecord" && r2.Data == null, "no requestData when not needed");
+        Assert.Equal(1, server.Connections, "one connection reused");
+    }
+
+    public static async Task Obs_ToggleSourceReadsStateFirst()
+    {
+        using var server = new FakeObsServer("p");
+        server.Handler = (type, _) => type switch
+        {
+            "GetCurrentProgramScene" => (new JsonObject { ["currentProgramSceneName"] = "Gaming", ["sceneName"] = "Gaming" }, null),
+            "GetSceneItemId" => (new JsonObject { ["sceneItemId"] = 7 }, null),
+            "GetSceneItemEnabled" => (new JsonObject { ["sceneItemEnabled"] = true }, null),
+            _ => (null, null),
+        };
+        using var obs = new ObsClient();
+        obs.Configure(new ObsSettings { Host = "127.0.0.1", Port = server.Port, Password = "p" });
+        await obs.ExecuteAsync(new ObsAction { Command = ObsCommand.ToggleSource, Source = "Webcam" });
+
+        var types = server.Requests.Select(r => r.Type).ToArray();
+        Assert.Equal("GetCurrentProgramScene,GetSceneItemId,GetSceneItemEnabled,SetSceneItemEnabled", string.Join(",", types));
+        var set = server.Requests.Last().Data!;
+        Assert.Equal("Gaming", set["sceneName"]!.GetValue<string>(), "scene");
+        Assert.Equal(7, set["sceneItemId"]!.GetValue<int>(), "item id");
+        Assert.Equal(false, set["sceneItemEnabled"]!.GetValue<bool>(), "flipped");
+    }
+
+    public static async Task Obs_ErrorsAreReadable()
+    {
+        using var server = new FakeObsServer("p");
+        server.Handler = (_, _) => (null, (600, "No source was found by the name of `X`."));
+
+        using var wrong = new ObsClient();
+        wrong.Configure(new ObsSettings { Host = "127.0.0.1", Port = server.Port, Password = "zle" });
+        await ExpectObsError(() => wrong.TestAsync(), "Nesprávne heslo");
+
+        using var noPass = new ObsClient();
+        noPass.Configure(new ObsSettings { Host = "127.0.0.1", Port = server.Port });
+        await ExpectObsError(() => noPass.TestAsync(), "vyžaduje heslo");
+
+        using var obs = new ObsClient();
+        obs.Configure(new ObsSettings { Host = "127.0.0.1", Port = server.Port, Password = "p" });
+        await ExpectObsError(() => obs.ExecuteAsync(new ObsAction { Command = ObsCommand.SwitchScene, Scene = "X" }), "nenašlo");
+        await ExpectObsError(() => obs.ExecuteAsync(new ObsAction { Command = ObsCommand.ToggleMute }), "nemá nastavenú");
+
+        using var none = new ObsClient { ConnectTimeout = TimeSpan.FromSeconds(1) };
+        none.Configure(new ObsSettings { Host = "127.0.0.1", Port = 1 });
+        await ExpectObsError(() => none.TestAsync(), "Nedá sa pripojiť");
+    }
+
+    public static async Task Obs_ReconnectsAfterObsRestart()
+    {
+        using var server = new FakeObsServer("p");
+        server.Handler = (_, _) => (new JsonObject { ["obsVersion"] = "31.0.0" }, null);
+        using var obs = new ObsClient();
+        obs.Configure(new ObsSettings { Host = "127.0.0.1", Port = server.Port, Password = "p" });
+        Assert.Equal("31.0.0", await obs.TestAsync(), "version");
+        Assert.True(obs.IsConnected, "connected");
+
+        server.DropAll();
+        for (int i = 0; i < 50 && obs.IsConnected; i++) await Task.Delay(20);
+        Assert.True(!obs.IsConnected, "noticed the drop");
+
+        await obs.TestAsync(); // reconnects transparently
+        Assert.Equal(2, server.Connections, "second connection");
+    }
+
+    public static async Task Obs_ConcurrentRequestsAreMatchedById()
+    {
+        using var server = new FakeObsServer("p");
+        server.Handler = (type, data) => (new JsonObject { ["echo"] = data?["n"]?.GetValue<int>() ?? -1 }, null);
+        using var obs = new ObsClient();
+        obs.Configure(new ObsSettings { Host = "127.0.0.1", Port = server.Port, Password = "p" });
+
+        var tasks = Enumerable.Range(0, 40)
+            .Select(n => obs.RequestAsync("Echo", new JsonObject { ["n"] = n }))
+            .ToArray();
+        var results = await Task.WhenAll(tasks);
+        for (int n = 0; n < 40; n++)
+            Assert.Equal(n, results[n].GetProperty("echo").GetInt32(), $"response {n}");
+        Assert.Equal(1, server.Connections, "single connection");
+    }
+
+    private static async Task ExpectObsError(Func<Task> action, string expected)
+    {
+        try
+        {
+            await action();
+        }
+        catch (ObsException ex)
+        {
+            Assert.True(ex.Message.Contains(expected), $"expected '{expected}' in '{ex.Message}'");
+            return;
+        }
+        throw new Exception($"expected ObsException containing '{expected}'");
+    }
+
     private sealed class FakeExecutor : IActionExecutor
     {
         public int Count;
-        public void Execute(DeckAction action)
+        public Task ExecuteAsync(DeckAction action)
         {
             Count++;
             if (action is KeysAction k) throw new InvalidOperationException(k.Keys);
+            return Task.CompletedTask;
         }
     }
 
