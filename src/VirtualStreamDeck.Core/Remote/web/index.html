@@ -93,6 +93,13 @@
   #overlay.show { display: flex; }
   #overlay h1 { font-size: 20px; margin: 0; }
   #overlay p { color: var(--muted); margin: 0; max-width: 340px; }
+  #ov-form { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 8px; width: min(340px, 90%); }
+  #ov-form[hidden] { display: none; }
+  #ov-link {
+    width: 100%; font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid #3a3a42;
+    background: var(--tile); color: var(--text); user-select: text; -webkit-user-select: text;
+  }
+  #ov-connect { font: inherit; font-weight: 600; padding: 10px 22px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; }
   #toast {
     position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translate(-50%, 40px); opacity: 0;
     background: #3a1d1f; color: #ffd7d8; border: 1px solid var(--error); padding: 10px 14px; border-radius: 12px; max-width: 90vw;
@@ -119,8 +126,16 @@
   <div id="hint" hidden><span id="hint-text"></span><button id="hint-close" aria-label="OK">✕</button></div>
   <main><div id="grid"></div></main>
 </div>
-<div id="overlay"><h1 id="ov-title"></h1><p id="ov-text"></p></div>
 <div id="toast"></div>
+</div>
+<!-- Outside #app, so it is never drawn rotated (the link field must be easy to type in) -->
+<div id="overlay">
+  <h1 id="ov-title"></h1><p id="ov-text"></p>
+  <form id="ov-form" hidden>
+    <p id="ov-form-text"></p>
+    <input id="ov-link" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="http://192.168.…/?t=…">
+    <button type="submit" id="ov-connect"></button>
+  </form>
 </div>
 
 <script>
@@ -160,6 +175,7 @@
       $(id).setAttribute("aria-label", T(sk, en));
     }
     $("hint-text").innerHTML = hintHtml();
+    applyFormLang();
   }
 
   // ───────── "add to home screen" = full screen ─────────
@@ -171,6 +187,12 @@
              "v prehliadači daj Pridať na plochu a otváraj deck z novej ikony.",
              "This home-screen icon has no valid code. Remove it, scan the QR code from Stream Deck (Settings → Phone), " +
              "choose Add to Home Screen in the browser and open the deck from the new icon.");
+  }
+  function applyFormLang() {
+    $("ov-form-text").textContent = T(
+      "Alebo vlož odkaz: vo fotoaparáte podrž prst na odkaze z QR kódu → Kopírovať.",
+      "Or paste the link: in the camera, press and hold the link from the QR code → Copy.");
+    $("ov-connect").textContent = T("Pripojiť", "Connect");
   }
 
   function hintHtml() {
@@ -193,11 +215,26 @@
   applyLang();
   overlay(T("Pripájam…", "Connecting…"));
 
-  function overlay(titleText, text) {
+  // withForm: also offer to paste the link (a home-screen icon can't receive a scanned QR code).
+  function overlay(titleText, text, withForm) {
     $("ov-title").textContent = titleText;
     $("ov-text").textContent = text || "";
+    $("ov-form").hidden = !withForm;
     $("overlay").classList.toggle("show", !!titleText);
   }
+
+  $("ov-form").addEventListener("submit", e => {
+    e.preventDefault();
+    const text = $("ov-link").value.trim();
+    const m = text.match(/[?&]t=([A-Za-z0-9_-]+)/) || text.match(/^([A-Za-z0-9_-]{16,})$/);
+    if (!m) { toast(T("To nie je odkaz zo Stream Decku.", "That is not a Stream Deck link.")); return; }
+    token = m[1];
+    try { localStorage.setItem("vsd-token", token); } catch (e) {}
+    keepToken();
+    overlay(T("Pripájam…", "Connecting…"));
+    retry = 0;
+    connect();
+  });
 
   let toastTimer = null;
   function toast(text) {
@@ -216,7 +253,8 @@
     clearTimeout(retryTimer);
     if (!token) {
       overlay(T("Naskenuj QR kód", "Scan the QR code"), standalone ? reAddText() :
-        T("Otvor na PC Stream Deck → Nastavenia → Mobil a naskenuj QR kód.", "On the PC open Stream Deck → Settings → Phone and scan the QR code."));
+        T("Otvor na PC Stream Deck → Nastavenia → Mobil a naskenuj QR kód.", "On the PC open Stream Deck → Settings → Phone and scan the QR code."),
+        standalone);
       return;
     }
     if (ws && ws.readyState <= 1) return;
@@ -225,7 +263,8 @@
       if (r.status === 401) {
         setStatus("off");
         overlay(T("Neplatný QR kód", "Invalid QR code"), standalone ? reAddText() :
-          T("Kód bol medzitým zmenený. Naskenuj nový v Stream Decku → Nastavenia → Mobil.", "The code has been changed. Scan the new one in Stream Deck → Settings → Phone."));
+          T("Kód bol medzitým zmenený. Naskenuj nový v Stream Decku → Nastavenia → Mobil.", "The code has been changed. Scan the new one in Stream Deck → Settings → Phone."),
+          standalone);
         return;
       }
     } catch (e) {

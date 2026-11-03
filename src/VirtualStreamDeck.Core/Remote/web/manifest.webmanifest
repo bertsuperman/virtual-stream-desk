@@ -1,7 +1,7 @@
 {
   "name": "Virtual Stream Deck",
   "short_name": "Stream Deck",
-  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#17171a",

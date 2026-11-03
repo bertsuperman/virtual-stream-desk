@@ -147,7 +147,7 @@ public sealed partial class RemoteServer : IDisposable
             {
                 case "/":
                 case "/index.html":
-                    await RespondAsync(stream, 200, "text/html; charset=utf-8", IndexHtml());
+                    await RespondAsync(stream, 200, "text/html; charset=utf-8", IndexHtml(request));
                     break;
                 case "/app.png":
                     await RespondAsync(stream, 200, "image/png", Asset("app.png"), cache: true);
@@ -242,9 +242,10 @@ public sealed partial class RemoteServer : IDisposable
     /// </summary>
     private byte[] Manifest(Request request)
     {
+        // Without a token there is no start_url: the browser then uses the page address, which keeps ?t=.
         var json = Encoding.UTF8.GetString(Asset("manifest.webmanifest"));
         if (Authorized(request))
-            json = json.Replace("\"start_url\": \"/\"", $"\"start_url\": \"/?t={Uri.EscapeDataString(request.Query["t"])}\"");
+            json = "{\n  \"start_url\": \"/?t=" + Uri.EscapeDataString(request.Query["t"]) + "\"," + json.TrimStart()[1..];
         return Encoding.UTF8.GetBytes(json);
     }
 
@@ -301,11 +302,19 @@ public sealed partial class RemoteServer : IDisposable
     private static readonly ConcurrentDictionary<string, byte[]> AssetCache = new();
 
     /// <summary>The page in the PC's language, so the "connecting…" screen is right before the first message.</summary>
-    private static byte[] IndexHtml() => L.Current == AppLanguage.Sk
-        ? Asset("index.html")
-        : AssetCache.GetOrAdd("index.html#en", _ =>
-            System.Text.Encoding.UTF8.GetBytes(System.Text.Encoding.UTF8.GetString(Asset("index.html"))
-                .Replace("<html lang=\"sk\">", "<html lang=\"en\">")));
+    /// <remarks>
+    /// With a valid token the manifest link already carries it in the HTML: browsers read the manifest
+    /// when the page loads, so a link changed later by script is not what "Add to Home Screen" uses.
+    /// </remarks>
+    private byte[] IndexHtml(Request request)
+    {
+        var html = System.Text.Encoding.UTF8.GetString(Asset("index.html"));
+        if (L.Current == AppLanguage.En) html = html.Replace("<html lang=\"sk\">", "<html lang=\"en\">");
+        if (Authorized(request))
+            html = html.Replace("id=\"manifest\" href=\"/manifest.webmanifest\"",
+                $"id=\"manifest\" href=\"/manifest.webmanifest?t={Uri.EscapeDataString(request.Query["t"])}\"");
+        return System.Text.Encoding.UTF8.GetBytes(html);
+    }
 
     private static byte[] Asset(string name) => AssetCache.GetOrAdd(name, n =>
     {

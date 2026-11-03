@@ -414,10 +414,14 @@ static class Tests
         Assert.True(html.Contains("<title>Stream Deck</title>"), "app served without token");
         Assert.Equal(200, (int)(await http.GetAsync("/app.png")).StatusCode, "app icon");
         Assert.Equal(200, (int)(await http.GetAsync("/manifest.webmanifest")).StatusCode, "manifest");
-        Assert.True((await http.GetStringAsync("/manifest.webmanifest")).Contains("\"start_url\": \"/\""), "manifest without token");
-        Assert.True((await http.GetStringAsync("/manifest.webmanifest?t=wrong")).Contains("\"start_url\": \"/\""), "wrong token not echoed");
-        Assert.True((await http.GetStringAsync("/manifest.webmanifest?t=" + env.Token)).Contains($"\"start_url\": \"/?t={env.Token}\""),
-            "home-screen icon starts with the token");
+        Assert.True(!(await http.GetStringAsync("/manifest.webmanifest")).Contains("start_url"), "manifest without token: page address");
+        Assert.True(!(await http.GetStringAsync("/manifest.webmanifest?t=wrong")).Contains("start_url"), "wrong token not echoed");
+        var manifest = await http.GetStringAsync("/manifest.webmanifest?t=" + env.Token);
+        Assert.True(manifest.Contains($"\"start_url\": \"/?t={env.Token}\""), "home-screen icon starts with the token");
+        System.Text.Json.JsonDocument.Parse(manifest).Dispose(); // still valid JSON
+        Assert.True((await http.GetStringAsync("/?t=" + env.Token)).Contains($"href=\"/manifest.webmanifest?t={env.Token}\""),
+            "page links the manifest with the token from the start");
+        Assert.True((await http.GetStringAsync("/?t=wrong")).Contains("href=\"/manifest.webmanifest\""), "no wrong token in the page");
         Assert.Equal(401, (int)(await http.GetAsync("/api/ping")).StatusCode, "no token");
         Assert.Equal(401, (int)(await http.GetAsync("/api/ping?t=wrong")).StatusCode, "wrong token");
         Assert.Equal(200, (int)(await http.GetAsync("/api/ping?t=" + env.Token)).StatusCode, "token ok");
