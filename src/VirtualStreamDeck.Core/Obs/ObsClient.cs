@@ -60,7 +60,7 @@ public sealed class ObsClient : IDisposable
         switch (action.Command)
         {
             case ObsCommand.SwitchScene:
-                await RequestAsync("SetCurrentProgramScene", new JsonObject { ["sceneName"] = Require(action.Scene, "scénu") }, ct);
+                await RequestAsync("SetCurrentProgramScene", new JsonObject { ["sceneName"] = Require(action.Scene, L.T("scénu", "scene")) }, ct);
                 break;
             case ObsCommand.ToggleRecord:
                 await RequestAsync("ToggleRecord", null, ct);
@@ -72,13 +72,13 @@ public sealed class ObsClient : IDisposable
                 await RequestAsync("SaveReplayBuffer", null, ct);
                 break;
             case ObsCommand.ToggleMute:
-                await RequestAsync("ToggleInputMute", new JsonObject { ["inputName"] = Require(action.Source, "zdroj zvuku") }, ct);
+                await RequestAsync("ToggleInputMute", new JsonObject { ["inputName"] = Require(action.Source, L.T("zdroj zvuku", "audio source")) }, ct);
                 break;
             case ObsCommand.ToggleSource:
-                await ToggleSourceAsync(action.Scene, Require(action.Source, "zdroj"), ct);
+                await ToggleSourceAsync(action.Scene, Require(action.Source, L.T("zdroj", "source")), ct);
                 break;
             default:
-                throw new ObsException("Neznámy OBS príkaz.");
+                throw new ObsException(L.T("Neznámy OBS príkaz.", "Unknown OBS command."));
         }
     }
 
@@ -147,8 +147,10 @@ public sealed class ObsClient : IDisposable
             : "?";
     }
 
+    private static string ConnectionLost => L.T("Spojenie s OBS sa prerušilo.", "The connection to OBS was lost.");
+
     private static string Require(string? value, string what) =>
-        string.IsNullOrWhiteSpace(value) ? throw new ObsException($"Tlačidlo nemá nastavenú {what}.") : value;
+        string.IsNullOrWhiteSpace(value) ? throw new ObsException(L.T($"Tlačidlo nemá nastavenú {what}.", $"The button has no {what} set.")) : value;
 
     // ───────────────────────── requests ─────────────────────────
 
@@ -173,7 +175,7 @@ public sealed class ObsClient : IDisposable
             }
             catch (TimeoutException)
             {
-                throw new ObsException("OBS neodpovedá.");
+                throw new ObsException(L.T("OBS neodpovedá.", "OBS is not responding."));
             }
 
             var status = response.GetProperty("requestStatus");
@@ -194,19 +196,19 @@ public sealed class ObsClient : IDisposable
 
     internal static string DescribeFailure(string requestType, int code, string? comment)
     {
-        string detail = comment ?? $"kód {code}";
+        string detail = comment ?? L.T($"kód {code}", $"code {code}");
         return code switch
         {
-            600 => $"OBS: nenašlo sa to, čo má tlačidlo ovládať ({detail}).",
+            600 => L.T($"OBS: nenašlo sa to, čo má tlačidlo ovládať ({detail}).", $"OBS: what the button controls was not found ({detail})."),
             500 or 501 => $"OBS: {detail}",
-            604 => $"OBS: replay buffer nie je zapnutý ({detail}).",
-            _ => $"OBS odmietlo príkaz {requestType}: {detail}",
+            604 => L.T($"OBS: replay buffer nie je zapnutý ({detail}).", $"OBS: the replay buffer is not running ({detail})."),
+            _ => L.T($"OBS odmietlo príkaz {requestType}: {detail}", $"OBS rejected {requestType}: {detail}"),
         };
     }
 
     private async Task SendAsync(int op, JsonObject d, CancellationToken ct)
     {
-        var ws = _ws ?? throw new ObsException("Spojenie s OBS sa prerušilo.");
+        var ws = _ws ?? throw new ObsException(ConnectionLost);
         var bytes = Encoding.UTF8.GetBytes(new JsonObject { ["op"] = op, ["d"] = d }.ToJsonString());
         await _sendLock.WaitAsync(ct);
         try
@@ -216,7 +218,7 @@ public sealed class ObsClient : IDisposable
         catch (Exception ex) when (ex is WebSocketException or ObjectDisposedException or InvalidOperationException)
         {
             Disconnect();
-            throw new ObsException("Spojenie s OBS sa prerušilo.", ex);
+            throw new ObsException(ConnectionLost, ex);
         }
         finally
         {
@@ -257,8 +259,10 @@ public sealed class ObsClient : IDisposable
                 ws.Dispose();
                 ct.ThrowIfCancellationRequested();
                 throw new ObsException(
-                    $"Nedá sa pripojiť k OBS ({settings.Host}:{settings.Port}). Beží OBS a je zapnutý WebSocket server? " +
-                    "V OBS: Nástroje → Nastavenia WebSocket servera.", ex);
+                    L.T($"Nedá sa pripojiť k OBS ({settings.Host}:{settings.Port}). Beží OBS a je zapnutý WebSocket server? " +
+                        "V OBS: Nástroje → Nastavenia WebSocket servera.",
+                        $"Cannot connect to OBS ({settings.Host}:{settings.Port}). Is OBS running with the WebSocket server enabled? " +
+                        "In OBS: Tools → WebSocket Server Settings."), ex);
             }
 
             var loopCts = new CancellationTokenSource();
@@ -279,7 +283,8 @@ public sealed class ObsClient : IDisposable
                 if (helloData.TryGetProperty("authentication", out var auth))
                 {
                     if (string.IsNullOrEmpty(settings.Password))
-                        throw new ObsException("OBS vyžaduje heslo. Zadaj ho v nastaveniach Stream Decku (sekcia OBS).");
+                        throw new ObsException(L.T("OBS vyžaduje heslo. Zadaj ho v nastaveniach Stream Decku (sekcia OBS).",
+                            "OBS requires a password. Enter it in the Stream Deck settings (OBS section)."));
                     identify["authentication"] = ComputeAuthentication(
                         settings.Password, auth.GetProperty("salt").GetString()!, auth.GetProperty("challenge").GetString()!);
                 }
@@ -290,7 +295,7 @@ public sealed class ObsClient : IDisposable
             catch (TimeoutException ex)
             {
                 Disconnect();
-                throw new ObsException("OBS neodpovedá pri pripájaní.", ex);
+                throw new ObsException(L.T("OBS neodpovedá pri pripájaní.", "OBS did not respond while connecting."), ex);
             }
             catch
             {
@@ -315,7 +320,7 @@ public sealed class ObsClient : IDisposable
     {
         var buffer = new byte[16 * 1024];
         using var message = new MemoryStream();
-        Exception failure = new ObsException("Spojenie s OBS sa prerušilo.");
+        Exception failure = new ObsException(ConnectionLost);
         try
         {
             while (!ct.IsCancellationRequested && ws.State == WebSocketState.Open)
@@ -349,9 +354,9 @@ public sealed class ObsClient : IDisposable
 
     private static ObsException DescribeClose(WebSocketCloseStatus? status, string? description) => (int?)status switch
     {
-        CloseAuthenticationFailed => new ObsException("Nesprávne heslo k OBS. Skontroluj ho v nastaveniach (sekcia OBS)."),
-        CloseUnsupportedRpcVersion => new ObsException("Táto verzia OBS nie je podporovaná. Treba OBS 28 alebo novšie."),
-        _ => new ObsException("OBS ukončilo spojenie" + (string.IsNullOrEmpty(description) ? "." : $": {description}")),
+        CloseAuthenticationFailed => new ObsException(L.T("Nesprávne heslo k OBS. Skontroluj ho v nastaveniach (sekcia OBS).", "Wrong OBS password. Check it in the settings (OBS section).")),
+        CloseUnsupportedRpcVersion => new ObsException(L.T("Táto verzia OBS nie je podporovaná. Treba OBS 28 alebo novšie.", "This OBS version is not supported. OBS 28 or newer is required.")),
+        _ => new ObsException(L.T("OBS ukončilo spojenie", "OBS closed the connection") + (string.IsNullOrEmpty(description) ? "." : $": {description}")),
     };
 
     private void HandleMessage(ReadOnlySpan<byte> json)
@@ -401,12 +406,12 @@ public sealed class ObsClient : IDisposable
             loopCts = _loopCts;
             _ws = null;
             _loopCts = null;
-            _hello?.TrySetException(new ObsException("Spojenie s OBS sa prerušilo."));
-            _identified?.TrySetException(new ObsException("Spojenie s OBS sa prerušilo."));
+            _hello?.TrySetException(new ObsException(ConnectionLost));
+            _identified?.TrySetException(new ObsException(ConnectionLost));
         }
         try { loopCts?.Cancel(); } catch (ObjectDisposedException) { }
         try { ws?.Abort(); ws?.Dispose(); } catch { /* ignore */ }
-        foreach (var tcs in _pending.Values) tcs.TrySetException(new ObsException("Spojenie s OBS sa prerušilo."));
+        foreach (var tcs in _pending.Values) tcs.TrySetException(new ObsException(ConnectionLost));
     }
 
     public void Dispose() => Disconnect();

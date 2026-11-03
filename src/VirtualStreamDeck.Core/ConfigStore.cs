@@ -46,10 +46,14 @@ public sealed class ConfigStore
         return Path.Combine(appDataDirectory, "VirtualStreamDeck");
     }
 
+    /// <summary>True when the last <see cref="Load"/> found no config file (first start).</summary>
+    public bool LoadedNew { get; private set; }
+
     public DeckConfig Load()
     {
         LastLoadWarning = null;
-        if (!File.Exists(ConfigPath))
+        LoadedNew = !File.Exists(ConfigPath);
+        if (LoadedNew)
         {
             var fresh = new DeckConfig();
             fresh.Normalize();
@@ -68,7 +72,8 @@ public sealed class ConfigStore
             var backup = Path.Combine(Directory, $"config.broken-{DateTime.Now:yyyyMMdd-HHmmss}.json");
             try { File.Copy(ConfigPath, backup, overwrite: true); } catch { /* best effort */ }
             LastLoadWarning =
-                $"Konfiguráciu sa nepodarilo načítať ({ex.Message}).\nPôvodný súbor je zálohovaný ako {Path.GetFileName(backup)}.";
+                L.T($"Konfiguráciu sa nepodarilo načítať ({ex.Message}).\nPôvodný súbor je zálohovaný ako {Path.GetFileName(backup)}.",
+                    $"The configuration could not be loaded ({ex.Message}).\nThe original file was backed up as {Path.GetFileName(backup)}.");
             var fresh = new DeckConfig();
             fresh.Normalize();
             return fresh;

@@ -74,8 +74,8 @@ public sealed partial class RemoteServer : IDisposable
             catch (SocketException ex)
             {
                 LastError = ex.SocketErrorCode == SocketError.AddressAlreadyInUse
-                    ? $"Port {port} už používa iná aplikácia. Zvoľ iný."
-                    : $"Server sa nepodarilo spustiť na porte {port}: {ex.Message}";
+                    ? L.T($"Port {port} už používa iná aplikácia. Zvoľ iný.", $"Port {port} is already used by another app. Choose a different one.")
+                    : L.T($"Server sa nepodarilo spustiť na porte {port}: {ex.Message}", $"Could not start the server on port {port}: {ex.Message}");
                 throw new RemoteException(LastError, ex);
             }
             LastError = null;
@@ -147,7 +147,7 @@ public sealed partial class RemoteServer : IDisposable
             {
                 case "/":
                 case "/index.html":
-                    await RespondAsync(stream, 200, "text/html; charset=utf-8", Asset("index.html"));
+                    await RespondAsync(stream, 200, "text/html; charset=utf-8", IndexHtml());
                     break;
                 case "/app.png":
                     await RespondAsync(stream, 200, "image/png", Asset("app.png"), cache: true);
@@ -287,6 +287,13 @@ public sealed partial class RemoteServer : IDisposable
     }
 
     private static readonly ConcurrentDictionary<string, byte[]> AssetCache = new();
+
+    /// <summary>The page in the PC's language, so the "connecting…" screen is right before the first message.</summary>
+    private static byte[] IndexHtml() => L.Current == Language.Sk
+        ? Asset("index.html")
+        : AssetCache.GetOrAdd("index.html#en", _ =>
+            System.Text.Encoding.UTF8.GetBytes(System.Text.Encoding.UTF8.GetString(Asset("index.html"))
+                .Replace("<html lang=\"sk\">", "<html lang=\"en\">")));
 
     private static byte[] Asset(string name) => AssetCache.GetOrAdd(name, n =>
     {
@@ -458,6 +465,7 @@ public sealed partial class RemoteServer : IDisposable
             ["rows"] = config.Rows,
             ["columns"] = config.Columns,
             ["showLabels"] = config.Settings.ShowLabels,
+            ["lang"] = L.Code(L.Current),
             ["activeProfile"] = config.ActiveProfile.Id,
             ["profiles"] = new JsonArray(config.Profiles
                 .Select(p => (JsonNode)new JsonObject { ["id"] = p.Id, ["name"] = p.Name })

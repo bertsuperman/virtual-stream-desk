@@ -9,7 +9,7 @@ public sealed class DeckConfig
     /// 3 = profiles (rows, columns and buttons moved into profiles[]), "profile" action, settings.remote.
     /// </summary>
     public const int CurrentVersion = 3;
-    public const string DefaultProfileName = "Hlavný";
+    public static string DefaultProfileName => L.T("Hlavný", "Main");
 
     public int Version { get; set; } = CurrentVersion;
     public DeckSettings Settings { get; set; } = new();
@@ -98,6 +98,43 @@ public sealed class DeckConfig
         bool removed = Profiles.RemoveAll(p => p.Id == id) > 0;
         if (ActiveProfileId == id) ActiveProfileId = Profiles[0].Id;
         return removed;
+    }
+
+    /// <summary>
+    /// Volume and playback buttons in the first row, the first thing a new deck shows.
+    /// Cells that are already taken are skipped.
+    /// </summary>
+    public static void AddMediaButtons(DeckProfile profile)
+    {
+        var buttons = new (MediaCommand Command, string Sk, string En)[]
+        {
+            (MediaCommand.PlayPause, "Play / pauza", "Play / pause"),
+            (MediaCommand.Next, "Ďalšia", "Next"),
+            (MediaCommand.VolumeDown, "Tichšie", "Volume down"),
+            (MediaCommand.VolumeUp, "Hlasnejšie", "Volume up"),
+            (MediaCommand.Mute, "Stlmiť", "Mute"),
+        };
+        int col = 0;
+        foreach (var (command, sk, en) in buttons)
+        {
+            while (profile.Buttons.Any(b => b.Row == 0 && b.Col == col)) col++;
+            profile.Buttons.Add(new DeckButton
+            {
+                Row = 0,
+                Col = col++,
+                Label = L.T(sk, en),
+                Action = new MediaAction { Command = command },
+            });
+        }
+        profile.Columns = Math.Max(profile.Columns, Math.Min(col, DeckProfile.MaxColumns));
+    }
+
+    /// <summary>A new profile with the media buttons (Profiles → "Sound profile").</summary>
+    public DeckProfile AddMediaProfile()
+    {
+        var profile = AddProfile(UniqueProfileName(L.T("Zvuk", "Sound")));
+        AddMediaButtons(profile);
+        return profile;
     }
 
     public string UniqueProfileName(string baseName)
@@ -217,6 +254,9 @@ public sealed class DeckSettings
     public bool AlwaysOnTop { get; set; } = true;
     public bool ShowLabels { get; set; } = true;
     public bool StartWithWindows { get; set; }
+
+    /// <summary>"sk" or "en"; null until the user picked one (asked on first start).</summary>
+    public string? Language { get; set; }
     /// <summary>Look for a newer build on GitHub at startup and every few hours.</summary>
     public bool CheckForUpdates { get; set; } = true;
     public WindowPosition? Window { get; set; }

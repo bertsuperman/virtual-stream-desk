@@ -58,7 +58,7 @@ public partial class ButtonEditorWindow : Window
         ProfileBox.ItemsSource = config.Profiles;
         ProfileBox.SelectedItem = config.Profiles.Find(p => p.Id != config.ActiveProfile.Id) ?? config.ActiveProfile;
 
-        Title = existing == null ? "Nové tlačidlo" : "Upraviť tlačidlo";
+        Title = existing == null ? L.T("Nové tlačidlo", "New button") : L.T("Upraviť tlačidlo", "Edit button");
         DeleteButton.Visibility = existing == null ? Visibility.Collapsed : Visibility.Visible;
 
         _icon = existing?.Icon;
@@ -179,8 +179,10 @@ public partial class ButtonEditorWindow : Window
         ObsSceneRow.Visibility = scene ? Visibility.Visible : Visibility.Collapsed;
         ObsSourceRow.Visibility = source ? Visibility.Visible : Visibility.Collapsed;
         ObsRefreshRow.Visibility = scene || source ? Visibility.Visible : Visibility.Collapsed;
-        ObsSceneLabel.Text = cmd == ObsCommand.ToggleSource ? "Scéna (prázdne = aktuálna scéna)" : "Scéna";
-        ObsSourceLabel.Text = cmd == ObsCommand.ToggleMute ? "Zdroj zvuku" : "Zdroj";
+        ObsSceneLabel.Text = cmd == ObsCommand.ToggleSource
+            ? L.T("Scéna (prázdne = aktuálna scéna)", "Scene (empty = current scene)")
+            : L.T("Scéna", "Scene");
+        ObsSourceLabel.Text = cmd == ObsCommand.ToggleMute ? L.T("Zdroj zvuku", "Audio source") : L.T("Zdroj", "Source");
     }
 
     /// <summary>Fills the scene / source drop-downs from the running OBS. Names can always be typed by hand.</summary>
@@ -188,7 +190,7 @@ public partial class ButtonEditorWindow : Window
     {
         int version = ++_obsLoadVersion;
         ObsStatus.ClearValue(TextBlock.ForegroundProperty);
-        ObsStatus.Text = "Načítavam z OBS…";
+        ObsStatus.Text = L.T("Načítavam z OBS…", "Loading from OBS…");
         try
         {
             var cmd = SelectedObsCommand;
@@ -204,13 +206,13 @@ public partial class ButtonEditorWindow : Window
             SetObsItems(ObsSceneBox, scenes);
             SetObsItems(ObsSourceBox, sources);
             _obsLoaded = true;
-            ObsStatus.Text = $"Načítané z OBS ({scenes.Count} scén).";
+            ObsStatus.Text = L.T($"Načítané z OBS ({scenes.Count} scén).", $"Loaded from OBS ({scenes.Count} scenes).");
         }
         catch (Exception ex)
         {
             if (version != _obsLoadVersion) return;
             ObsStatus.Foreground = WarningBrush;
-            ObsStatus.Text = ex.Message + " Názov môžeš napísať aj ručne.";
+            ObsStatus.Text = ex.Message + L.T(" Názov môžeš napísať aj ručne.", " You can also type the name.");
         }
     }
 
@@ -235,8 +237,8 @@ public partial class ButtonEditorWindow : Window
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Vyber program alebo súbor",
-            Filter = "Všetky súbory|*.*|Programy a odkazy|*.exe;*.lnk;*.bat;*.cmd",
+            Title = L.T("Vyber program alebo súbor", "Choose a program or file"),
+            Filter = L.T("Všetky súbory", "All files") + "|*.*|" + L.T("Programy a odkazy", "Programs and shortcuts") + "|*.exe;*.lnk;*.bat;*.cmd",
             DereferenceLinks = false, // keep .lnk as .lnk (it carries arguments and the right icon)
         };
         if (dlg.ShowDialog(this) == true)
@@ -248,7 +250,7 @@ public partial class ButtonEditorWindow : Window
 
     private void BrowseFolder_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new OpenFolderDialog { Title = "Vyber priečinok" };
+        var dlg = new OpenFolderDialog { Title = L.T("Vyber priečinok", "Choose a folder") };
         if (dlg.ShowDialog(this) == true)
         {
             TargetBox.Text = dlg.FolderName;
@@ -273,8 +275,9 @@ public partial class ButtonEditorWindow : Window
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Vyber ikonu",
-            Filter = "Obrázky a programy|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.webp;*.exe;*.lnk;*.dll|Všetky súbory|*.*",
+            Title = L.T("Vyber ikonu", "Choose an icon"),
+            Filter = L.T("Obrázky a programy", "Pictures and programs") + "|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.ico;*.webp;*.exe;*.lnk;*.dll|" +
+                     L.T("Všetky súbory", "All files") + "|*.*",
             DereferenceLinks = false,
         };
         if (dlg.ShowDialog(this) == true) SetIconFrom(dlg.FileName);
@@ -302,7 +305,7 @@ public partial class ButtonEditorWindow : Window
         var icon = _icons.CreateFrom(path);
         if (icon == null)
         {
-            Warn("Z tohto súboru sa nepodarilo vytvoriť ikonu.");
+            Warn(L.T("Z tohto súboru sa nepodarilo vytvoriť ikonu.", "Could not make an icon from this file."));
             return;
         }
         _icon = icon;
@@ -328,22 +331,24 @@ public partial class ButtonEditorWindow : Window
 
         if (hk == null)
         {
-            HotkeyHint.Text = "Nepovinné. Skratka spustí toto tlačidlo, aj keď je okno skryté.";
+            HotkeyHint.Text = L.T("Nepovinné. Skratka spustí toto tlačidlo, aj keď je okno skryté.", "Optional. The hotkey runs this button even when the window is hidden.");
             HotkeyHint.ClearValue(TextBlock.ForegroundProperty);
             HotkeyHint.Opacity = 0.6;
         }
         else if (_config.FindHotkeyConflict(hk.Value, _existing?.Id) is { } other)
         {
-            HotkeyHint.Text = $"Túto skratku už má tlačidlo „{other.Label ?? "bez popisu"}“.";
+            HotkeyHint.Text = L.T("Túto skratku už má tlačidlo ", "This hotkey is already used by the button ") + MainWindow.Quote(other.Label ?? L.T("bez popisu", "without label")) + ".";
         }
         else if (!hk.Value.HasModifiers)
         {
-            HotkeyHint.Text = $"Pozor: kláves {hk} bez Ctrl/Alt/Shift prestane fungovať normálne, kým appka beží. " +
-                              "Hodí sa napr. F13–F24 alebo numerická klávesnica.";
+            HotkeyHint.Text = L.T($"Pozor: kláves {hk} bez Ctrl/Alt/Shift prestane fungovať normálne, kým appka beží. " +
+                                  "Hodí sa napr. F13–F24 alebo numerická klávesnica.",
+                                  $"Note: {hk} without Ctrl/Alt/Shift stops working normally while the app runs. " +
+                                  "Good choices are F13–F24 or the numeric keypad.");
         }
         else
         {
-            HotkeyHint.Text = "Skratka spustí toto tlačidlo, aj keď je okno skryté.";
+            HotkeyHint.Text = L.T("Skratka spustí toto tlačidlo, aj keď je okno skryté.", "The hotkey runs this button even when the window is hidden.");
             HotkeyHint.ClearValue(TextBlock.ForegroundProperty);
             HotkeyHint.Opacity = 0.6;
         }
@@ -359,7 +364,7 @@ public partial class ButtonEditorWindow : Window
             case "keys":
                 if (KeysBox.Hotkey is not { } keys)
                 {
-                    Warn("Nastav skratku, ktorú má tlačidlo poslať.");
+                    Warn(L.T("Nastav skratku, ktorú má tlačidlo poslať.", "Set the key combination the button should send."));
                     return;
                 }
                 action = new KeysAction { Keys = keys.ToString() };
@@ -368,7 +373,7 @@ public partial class ButtonEditorWindow : Window
             case "profile":
                 if (ProfileBox.SelectedItem is not DeckProfile targetProfile)
                 {
-                    Warn("Vyber profil, na ktorý sa má prepnúť.");
+                    Warn(L.T("Vyber profil, na ktorý sa má prepnúť.", "Choose the profile to switch to."));
                     return;
                 }
                 action = new ProfileAction { ProfileId = targetProfile.Id };
@@ -380,12 +385,12 @@ public partial class ButtonEditorWindow : Window
                 var source = ObsSourceBox.Text.Trim();
                 if (obsCmd == ObsCommand.SwitchScene && scene.Length == 0)
                 {
-                    Warn("Vyber scénu, na ktorú sa má OBS prepnúť.");
+                    Warn(L.T("Vyber scénu, na ktorú sa má OBS prepnúť.", "Choose the scene OBS should switch to."));
                     return;
                 }
                 if (obsCmd is ObsCommand.ToggleMute or ObsCommand.ToggleSource && source.Length == 0)
                 {
-                    Warn("Vyber zdroj, ktorý má tlačidlo ovládať.");
+                    Warn(L.T("Vyber zdroj, ktorý má tlačidlo ovládať.", "Choose the source the button should control."));
                     return;
                 }
                 action = new ObsAction
@@ -405,7 +410,7 @@ public partial class ButtonEditorWindow : Window
                 var target = TargetBox.Text.Trim();
                 if (target.Length == 0)
                 {
-                    Warn("Zadaj, čo sa má otvoriť – program, súbor, priečinok alebo web.");
+                    Warn(L.T("Zadaj, čo sa má otvoriť – program, súbor, priečinok alebo web.", "Enter what to open – a program, file, folder or website."));
                     return;
                 }
                 action = new OpenAction
@@ -419,7 +424,7 @@ public partial class ButtonEditorWindow : Window
         var hotkey = GlobalHotkeyBox.Hotkey;
         if (hotkey is { } h && _config.FindHotkeyConflict(h, _existing?.Id) is { } other)
         {
-            Warn($"Skratku {h} už má tlačidlo „{other.Label ?? "bez popisu"}“.");
+            Warn(L.T($"Skratku {h} už má tlačidlo ", $"{h} is already used by the button ") + MainWindow.Quote(other.Label ?? L.T("bez popisu", "without label")) + ".");
             return;
         }
 

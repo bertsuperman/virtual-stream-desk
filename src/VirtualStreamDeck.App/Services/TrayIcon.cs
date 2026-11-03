@@ -1,20 +1,31 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using VirtualStreamDeck.Core;
 
 namespace VirtualStreamDeck.App.Services;
 
 internal sealed class TrayIcon : IDisposable
 {
     private readonly NotifyIcon _icon;
+    private readonly Action _languageChanged;
 
     public TrayIcon(string text, Action toggleWindow, Action openSettings, Action exit)
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Zobraziť / skryť", null, (_, _) => toggleWindow());
-        menu.Items.Add("Nastavenia…", null, (_, _) => openSettings());
+        var show = menu.Items.Add("", null, (_, _) => toggleWindow());
+        var settings = menu.Items.Add("", null, (_, _) => openSettings());
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Ukončiť", null, (_, _) => exit());
+        var quit = menu.Items.Add("", null, (_, _) => exit());
+        void Texts()
+        {
+            show.Text = L.T("Zobraziť / skryť", "Show / hide");
+            settings.Text = L.T("Nastavenia…", "Settings…");
+            quit.Text = L.T("Ukončiť", "Quit");
+        }
+        Texts();
+        _languageChanged = Texts;
+        L.Changed += _languageChanged;
 
         _icon = new NotifyIcon
         {
@@ -45,6 +56,7 @@ internal sealed class TrayIcon : IDisposable
 
     public void Dispose()
     {
+        L.Changed -= _languageChanged;
         _icon.Visible = false;
         _icon.Dispose();
     }

@@ -81,7 +81,8 @@ public partial class MainWindow : Window
         {
             _savePositionTimer.Stop();
             if (WindowState != WindowState.Normal || !IsVisible) return;
-            double left = Left, top = Top;
+            // Store where the deck is, without the side panel on its left.
+            double left = Left + (SidePanel.Visibility == Visibility.Visible ? SidePanel.ActualWidth : 0), top = Top;
             _deck.Update(c => c.Settings.Window = new WindowPosition { X = left, Y = top }, notify: false);
         };
         LocationChanged += (_, _) =>
@@ -94,6 +95,11 @@ public partial class MainWindow : Window
         SidePanel.Initialize(deck, obs, remote, updates);
         SidePanel.CollapseRequested += () => SetPanel(null);
         updates.Changed += OnUpdateChanged;
+        L.Changed += () =>
+        {
+            Rebuild(); // tooltips and the title are built in code
+            OnUpdateChanged();
+        };
         Rebuild();
     }
 
@@ -111,23 +117,24 @@ public partial class MainWindow : Window
         UpdateRailButton.IsEnabled = !busy;
         UpdateRailButton.ToolTip = u.Current switch
         {
-            UpdateService.State.Downloading => $"Sťahujem verziu {info?.Version}… {u.Percent} %",
-            UpdateService.State.Restarting => "Spúšťam novú verziu…",
-            _ => $"Nová verzia {info?.Version} – klikni a aktualizuj",
+            UpdateService.State.Downloading => L.T($"Sťahujem verziu {info?.Version}… {u.Percent} %", $"Downloading version {info?.Version}… {u.Percent} %"),
+            UpdateService.State.Restarting => L.T("Spúšťam novú verziu…", "Starting the new version…"),
+            _ => L.T($"Nová verzia {info?.Version} – klikni a aktualizuj", $"New version {info?.Version} – click to update"),
         };
 
         switch (u.Current)
         {
             case UpdateService.State.Available when info != null && info.Version != _announcedVersion:
                 _announcedVersion = info.Version;
-                ShowStatus($"Je dostupná nová verzia {info.Version}. Aktualizuješ ju zelenou šípkou vpravo.", isError: false);
+                ShowStatus(L.T($"Je dostupná nová verzia {info.Version}. Aktualizuješ ju zelenou šípkou v pruhu s ikonami.",
+                    $"Version {info.Version} is available. Update with the green arrow in the icon bar."), isError: false);
                 break;
             case UpdateService.State.Downloading when u.Percent / 10 != _lastToastPercent:
                 _lastToastPercent = u.Percent / 10; // a toast every 10 %, not on every chunk
-                ShowStatus($"Sťahujem verziu {info?.Version}… {u.Percent} %", isError: false);
+                ShowStatus(L.T($"Sťahujem verziu {info?.Version}… {u.Percent} %", $"Downloading version {info?.Version}… {u.Percent} %"), isError: false);
                 break;
             case UpdateService.State.Restarting:
-                ShowStatus("Spúšťam novú verziu…", isError: false);
+                ShowStatus(L.T("Spúšťam novú verziu…", "Starting the new version…"), isError: false);
                 break;
             case UpdateService.State.Error when u.Error != null && SidePanel.Visibility != Visibility.Visible:
                 ShowStatus(u.Error, isError: true);
@@ -179,9 +186,11 @@ public partial class MainWindow : Window
         {
             e.Cancel = true;
             var answer = MessageBox.Show(this,
-                "Naozaj ukončiť Virtual Stream Deck?\n\nKlávesové skratky aj ovládanie z mobilu prestanú fungovať.\n" +
-                "Ak chceš okno len schovať, minimalizuj ho alebo klikni na ikonu v lište vedľa hodín.",
-                "Ukončiť Stream Deck", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+                L.T("Naozaj ukončiť Virtual Stream Deck?\n\nKlávesové skratky aj ovládanie z mobilu prestanú fungovať.\n" +
+                    "Ak chceš okno len schovať, minimalizuj ho alebo klikni na ikonu v lište vedľa hodín.",
+                    "Quit Virtual Stream Deck?\n\nHotkeys and phone control will stop working.\n" +
+                    "To just hide the window, minimize it or click the icon in the tray next to the clock."),
+                L.T("Ukončiť Stream Deck", "Quit Stream Deck"), MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
             if (answer == MessageBoxResult.Yes) Dispatcher.InvokeAsync(((App)Application.Current).ExitApp);
             return;
         }
@@ -220,16 +229,22 @@ public partial class MainWindow : Window
     private void SetPanel(string? section)
     {
         bool open = section != null;
+        bool wasOpen = SidePanel.Visibility == Visibility.Visible;
+        bool normal = WindowState == WindowState.Normal && IsLoaded;
         if (open)
         {
             SidePanel.ShowSection(section!);
             SidePanel.Visibility = Visibility.Visible;
+            // The panel opens to the left of the deck: move the window so the deck stays where it is.
+            if (!wasOpen && normal) Left -= SidePanel.Width;
             SetNoActivate(false);
             Activate();
         }
         else
         {
+            double panelWidth = SidePanel.ActualWidth;
             SidePanel.Visibility = Visibility.Collapsed;
+            if (wasOpen && normal) Left += panelWidth;
             SetNoActivate(true);
         }
 
@@ -517,58 +532,66 @@ public partial class MainWindow : Window
 
     private string BuildToolTip(DeckButton? b)
     {
-        if (b == null) return "Klikni alebo sem pretiahni program, súbor či odkaz";
+        if (b == null) return L.T("Klikni alebo sem pretiahni program, súbor či odkaz", "Click, or drop a program, file or link here");
 
         var lines = new List<string>();
         if (!string.IsNullOrWhiteSpace(b.Label)) lines.Add(b.Label!);
         lines.Add(b.Action is ProfileAction pa
-            ? $"Prepnúť na profil „{_deck.Config.FindProfile(pa.ProfileId)?.Name ?? "?"}“"
+            ? L.T($"Prepnúť na profil „{ProfileName(pa)}“", $"Switch to profile \"{ProfileName(pa)}\"")
             : DescribeAction(b.Action));
         if (!string.IsNullOrWhiteSpace(b.Hotkey))
         {
             bool failed = _hotkeys?.Failed.Contains(b.Id) == true;
-            lines.Add(failed ? $"⚠ Skratku {b.Hotkey} používa iná aplikácia" : $"Skratka: {b.Hotkey}");
+            lines.Add(failed
+                ? L.T($"⚠ Skratku {b.Hotkey} používa iná aplikácia", $"⚠ {b.Hotkey} is used by another app")
+                : L.T($"Skratka: {b.Hotkey}", $"Hotkey: {b.Hotkey}"));
         }
-        lines.Add("Pravý klik = upraviť, ťahaním presunieš");
+        lines.Add(L.T("Pravý klik = upraviť, ťahaním presunieš", "Right-click = edit, drag to move"));
         return string.Join("\n", lines);
     }
 
+    private string ProfileName(ProfileAction pa) => _deck.Config.FindProfile(pa.ProfileId)?.Name ?? "?";
+
     internal static string DescribeAction(DeckAction? action) => action switch
     {
-        OpenAction o => "Otvoriť: " + o.Target,
-        KeysAction k => "Poslať skratku: " + k.Keys,
-        ProfileAction => "Prepnúť profil",
+        OpenAction o => L.T("Otvoriť: ", "Open: ") + o.Target,
+        KeysAction k => L.T("Poslať skratku: ", "Send keys: ") + k.Keys,
+        ProfileAction => L.T("Prepnúť profil", "Switch profile"),
         MediaAction m => MediaName(m.Command),
         ObsAction o => "OBS: " + ObsName(o.Command) + o.Command switch
         {
-            ObsCommand.SwitchScene => $" „{o.Scene}“",
-            ObsCommand.ToggleMute => $" „{o.Source}“",
-            ObsCommand.ToggleSource => $" „{o.Source}“" + (string.IsNullOrWhiteSpace(o.Scene) ? "" : $" v scéne „{o.Scene}“"),
+            ObsCommand.SwitchScene => " " + Quote(o.Scene),
+            ObsCommand.ToggleMute => " " + Quote(o.Source),
+            ObsCommand.ToggleSource => " " + Quote(o.Source) +
+                                       (string.IsNullOrWhiteSpace(o.Scene) ? "" : L.T(" v scéne ", " in scene ") + Quote(o.Scene)),
             _ => "",
         },
-        _ => "Bez akcie",
+        _ => L.T("Bez akcie", "No action"),
     };
+
+    /// <summary>„Slovak“ or "English" quotes.</summary>
+    internal static string Quote(string? text) => L.T($"„{text}“", $"\"{text}\"");
 
     internal static string ObsName(ObsCommand c) => c switch
     {
-        ObsCommand.SwitchScene => "Prepnúť scénu",
-        ObsCommand.ToggleRecord => "Zapnúť / vypnúť nahrávanie",
-        ObsCommand.ToggleStream => "Zapnúť / vypnúť stream",
-        ObsCommand.ToggleMute => "Stlmiť / zapnúť zvuk zdroja",
-        ObsCommand.ToggleSource => "Zobraziť / skryť zdroj",
-        ObsCommand.SaveReplay => "Uložiť replay",
+        ObsCommand.SwitchScene => L.T("Prepnúť scénu", "Switch scene"),
+        ObsCommand.ToggleRecord => L.T("Zapnúť / vypnúť nahrávanie", "Start / stop recording"),
+        ObsCommand.ToggleStream => L.T("Zapnúť / vypnúť stream", "Start / stop streaming"),
+        ObsCommand.ToggleMute => L.T("Stlmiť / zapnúť zvuk zdroja", "Mute / unmute a source"),
+        ObsCommand.ToggleSource => L.T("Zobraziť / skryť zdroj", "Show / hide a source"),
+        ObsCommand.SaveReplay => L.T("Uložiť replay", "Save replay"),
         _ => c.ToString(),
     };
 
     internal static string MediaName(MediaCommand c) => c switch
     {
-        MediaCommand.PlayPause => "Play / pauza",
-        MediaCommand.Next => "Ďalšia skladba",
-        MediaCommand.Prev => "Predošlá skladba",
+        MediaCommand.PlayPause => L.T("Play / pauza", "Play / pause"),
+        MediaCommand.Next => L.T("Ďalšia skladba", "Next track"),
+        MediaCommand.Prev => L.T("Predošlá skladba", "Previous track"),
         MediaCommand.Stop => "Stop",
-        MediaCommand.VolumeUp => "Hlasitosť +",
-        MediaCommand.VolumeDown => "Hlasitosť −",
-        MediaCommand.Mute => "Stlmiť / zapnúť zvuk",
+        MediaCommand.VolumeUp => L.T("Hlasitosť +", "Volume up"),
+        MediaCommand.VolumeDown => L.T("Hlasitosť −", "Volume down"),
+        MediaCommand.Mute => L.T("Stlmiť / zapnúť zvuk", "Mute / unmute"),
         _ => c.ToString(),
     };
 
@@ -583,7 +606,7 @@ public partial class MainWindow : Window
         if (result.Success) return;
 
         if (tile != null) FlashBorder(tile, ErrorBrush);
-        ShowStatus(result.Error ?? "Akcia zlyhala.", isError: true);
+        ShowStatus(result.Error ?? L.T("Akcia zlyhala.", "The action failed."), isError: true);
     }
 
     private static void SetScale(Border tile, double scale)
@@ -637,7 +660,7 @@ public partial class MainWindow : Window
             var b = _deck.Config.FindById(id);
             if (b?.Hotkey != null) names.Add(b.Hotkey);
         }
-        ShowStatus($"Obsadené skratky: {string.Join(", ", names)}", isError: true);
+        ShowStatus(L.T("Obsadené skratky: ", "Hotkeys already taken: ") + string.Join(", ", names), isError: true);
     }
 
     // ───────────────────────── drag & drop ─────────────────────────
@@ -708,7 +731,8 @@ public partial class MainWindow : Window
         });
 
         if (skipped > 0)
-            ShowStatus($"Nezmestilo sa: {skipped}. Pridaj riadok alebo stĺpec v nastaveniach.", isError: true);
+            ShowStatus(L.T($"Nezmestilo sa: {skipped}. Pridaj riadok alebo stĺpec v nastaveniach.",
+                $"Did not fit: {skipped}. Add a row or column in the settings."), isError: true);
     }
 
     private DeckButton CreateButtonFor(string target, int row, int col)
@@ -773,7 +797,7 @@ public partial class MainWindow : Window
         {
             Rebuild(); // refresh the tooltip warning
             var hk = _deck.Config.FindById(savedId)?.Hotkey;
-            ShowStatus($"Skratku {hk} už používa iná aplikácia. Vyber inú.", isError: true);
+            ShowStatus(L.T($"Skratku {hk} už používa iná aplikácia. Vyber inú.", $"{hk} is already used by another app. Pick a different one."), isError: true);
         }
     }
 

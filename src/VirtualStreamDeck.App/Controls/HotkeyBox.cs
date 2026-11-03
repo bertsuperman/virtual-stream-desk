@@ -8,7 +8,7 @@ namespace VirtualStreamDeck.App.Controls;
 /// <summary>Text box that records a key combination when the user presses it.</summary>
 public sealed class HotkeyBox : TextBox
 {
-    private const string Placeholder = "Klikni sem a stlač skratku…";
+    private static string Placeholder => L.T("Klikni sem a stlač skratku…", "Click here and press a hotkey…");
     private Hotkey? _hotkey;
 
     public HotkeyBox()

@@ -84,7 +84,7 @@ internal sealed class UpdateService
                 Set(before); // background check: stay silent, try again later
                 return;
             }
-            Error = ex is UpdateException ? ex.Message : "GitHub neodpovedá. Skús to neskôr.";
+            Error = ex is UpdateException ? ex.Message : L.T("GitHub neodpovedá. Skús to neskôr.", "GitHub is not responding. Try again later.");
             Set(State.Error);
         }
     }
@@ -94,12 +94,16 @@ internal sealed class UpdateService
     {
         if (Available is not { } info || Current is State.Downloading or State.Restarting || _exe == null) return;
 
-        var text = $"Aktualizovať na verziu {info.Version}?\n\n" +
-                   $"Teraz máš {AppInfo.Version}. Stream Deck sa na pár sekúnd zavrie a sám sa znova spustí. " +
-                   "Tlačidlá a nastavenia ostanú.";
+        var text = L.T($"Aktualizovať na verziu {info.Version}?\n\n" +
+                       $"Teraz máš {AppInfo.Version}. Stream Deck sa na pár sekúnd zavrie a sám sa znova spustí. " +
+                       "Tlačidlá a nastavenia ostanú.",
+                       $"Update to version {info.Version}?\n\n" +
+                       $"You have {AppInfo.Version}. Stream Deck closes for a few seconds and starts again by itself. " +
+                       "Buttons and settings stay.");
+        var title = L.T("Aktualizácia", "Update");
         var answer = owner != null
-            ? MessageBox.Show(owner, text, "Aktualizácia", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes)
-            : MessageBox.Show(text, "Aktualizácia", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes);
+            ? MessageBox.Show(owner, text, title, MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes)
+            : MessageBox.Show(text, title, MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes);
         if (answer != MessageBoxResult.Yes) return;
 
         Percent = 0;
@@ -117,7 +121,7 @@ internal sealed class UpdateService
         }
         catch (Exception ex) when (ex is UpdateException or OperationCanceledException)
         {
-            Error = ex is UpdateException ? ex.Message : "Sťahovanie trvalo príliš dlho. Skús to znova.";
+            Error = ex is UpdateException ? ex.Message : L.T("Sťahovanie trvalo príliš dlho. Skús to znova.", "The download took too long. Try again.");
             Set(State.Error);
             return;
         }
@@ -130,7 +134,8 @@ internal sealed class UpdateService
         }
         catch (Exception ex)
         {
-            Error = $"Nová verzia je stiahnutá, ale nepodarilo sa ju spustiť ({ex.Message}). Ukonči Stream Deck a spusti ho znova.";
+            Error = L.T($"Nová verzia je stiahnutá, ale nepodarilo sa ju spustiť ({ex.Message}). Ukonči Stream Deck a spusti ho znova.",
+                $"The new version is downloaded but could not be started ({ex.Message}). Quit Stream Deck and start it again.");
             Set(State.Error);
             return;
         }
@@ -138,7 +143,8 @@ internal sealed class UpdateService
         // Normally this instance is gone within a few seconds.
         await Task.Delay(TimeSpan.FromSeconds(30));
         if (Current != State.Restarting) return;
-        Error = "Nová verzia je pripravená, ale nespustila sa. Ukonči Stream Deck a spusti ho znova.";
+        Error = L.T("Nová verzia je pripravená, ale nespustila sa. Ukonči Stream Deck a spusti ho znova.",
+            "The new version is ready but did not start. Quit Stream Deck and start it again.");
         Set(State.Error);
     }
 

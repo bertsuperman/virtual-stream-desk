@@ -75,7 +75,7 @@ public sealed class Deck
         {
             var button = Config.FindById(buttonId);
             if (button == null || !Config.IsVisible(button))
-                return Task.FromResult(PressResult.Fail("Tlačidlo neexistuje."));
+                return Task.FromResult(PressResult.Fail(L.T("Tlačidlo neexistuje.", "The button does not exist.")));
             action = button.Action;
         }
         if (action == null)
@@ -85,7 +85,7 @@ public sealed class Deck
         {
             return Task.FromResult(SwitchProfile(profile.ProfileId)
                 ? PressResult.Ok
-                : PressResult.Fail("Tento profil už neexistuje. Uprav tlačidlo."));
+                : PressResult.Fail(L.T("Tento profil už neexistuje. Uprav tlačidlo.", "This profile no longer exists. Edit the button.")));
         }
         // Actions may wait for the user to release modifier keys, so never run them on the UI thread.
         return Task.Run(async () =>

@@ -39,6 +39,7 @@ public partial class App : Application
         var deck = new Deck(store, new WindowsActionExecutor(obs));
         _deck = deck;
         deck.Load();
+        SetUpLanguage(deck, store.LoadedNew);
         var remote = new RemoteServer(deck);
         _remote = remote;
 
@@ -71,6 +72,26 @@ public partial class App : Application
 
         if (store.LastLoadWarning is { } warning)
             MessageBox.Show(warning, AppInfo.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    /// <summary>Asks for the language on first start; a brand new deck starts with volume and playback buttons.</summary>
+    private static void SetUpLanguage(Deck deck, bool firstStart)
+    {
+        var language = L.Parse(deck.Config.Settings.Language);
+        bool ask = language == null;
+        if (ask) language = LanguageWindow.Ask();
+        L.Set(language!.Value);
+
+        if (!ask && !firstStart) return;
+        deck.Update(c =>
+        {
+            c.Settings.Language = L.Code(language.Value);
+            if (firstStart)
+            {
+                c.ActiveProfile.Name = DeckConfig.DefaultProfileName; // in the chosen language
+                DeckConfig.AddMediaButtons(c.ActiveProfile);
+            }
+        }, notify: false);
     }
 
     private void OnUiThread(Action action)
@@ -139,7 +160,7 @@ public partial class App : Application
             // nothing else we can do
         }
 
-        MessageBox.Show("Nastala neočakávaná chyba:\n\n" + e.Exception.Message,
+        MessageBox.Show(L.T("Nastala neočakávaná chyba:\n\n", "An unexpected error occurred:\n\n") + e.Exception.Message,
             AppInfo.ProductName, MessageBoxButton.OK, MessageBoxImage.Error);
         e.Handled = true;
     }

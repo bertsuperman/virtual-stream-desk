@@ -45,6 +45,7 @@
         </Style>
     </Window.Resources>
 
+    <!-- Left to right: side panel (collapsible), rail, deck -->
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
@@ -52,8 +53,11 @@
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
+        <!-- Side panel: settings, profiles, guide -->
+        <local:SettingsPanel x:Name="SidePanel" Grid.Column="0" Width="470" Height="580" Visibility="Collapsed" />
+
         <!-- The deck -->
-        <Grid Grid.Column="0" VerticalAlignment="Top">
+        <Grid Grid.Column="2" VerticalAlignment="Top">
             <UniformGrid x:Name="DeckGrid" Margin="8" />
             <Border x:Name="StatusToast"
                     VerticalAlignment="Bottom"
@@ -73,18 +77,15 @@
         <Border Grid.Column="1" Background="#FF1C1C21" BorderBrush="#FF2A2A30" BorderThickness="1,0,1,0">
             <StackPanel Margin="5,8,5,8">
                 <Button x:Name="ProfilesRailButton" Style="{StaticResource RailButton}" Content="&#xE81E;"
-                        ToolTip="Profily" Click="ProfilesRail_Click" />
+                        ToolTip="{local:T 'Profily', 'Profiles'}" Click="ProfilesRail_Click" />
                 <Button x:Name="SettingsRailButton" Style="{StaticResource RailButton}" Content="&#xE713;"
-                        ToolTip="Nastavenia" Click="SettingsRail_Click" />
+                        ToolTip="{local:T 'Nastavenia', 'Settings'}" Click="SettingsRail_Click" />
                 <Button x:Name="GuideRailButton" Style="{StaticResource RailButton}" Content="&#xE897;"
-                        ToolTip="Návod" Click="GuideRail_Click" />
+                        ToolTip="{local:T 'Návod', 'Guide'}" Click="GuideRail_Click" />
                 <!-- Shown only when a newer version is on GitHub -->
                 <Button x:Name="UpdateRailButton" Style="{StaticResource RailButton}" Content="&#xE896;"
                         Foreground="#FF5CCB6E" Visibility="Collapsed" Click="UpdateRail_Click" />
             </StackPanel>
         </Border>
-
-        <!-- Side panel: settings, profiles, guide -->
-        <local:SettingsPanel x:Name="SidePanel" Grid.Column="2" Width="470" Height="580" Visibility="Collapsed" />
     </Grid>
 </Window>

@@ -74,7 +74,7 @@ public static class Updater
         }
 
         var info = ParseManifest(text)
-                   ?? throw new UpdateException("Informácia o novej verzii na GitHube je neplatná. Skús to neskôr.");
+                   ?? throw new UpdateException(L.T("Informácia o novej verzii na GitHube je neplatná. Skús to neskôr.", "The version info on GitHub is invalid. Try again later."));
         return IsNewer(info.Version, currentVersion) ? info : null;
     }
 
@@ -117,7 +117,8 @@ public static class Updater
             var actual = Convert.ToHexStringLower(hash.GetHashAndReset());
             if (actual != info.Sha256)
                 throw new UpdateException(
-                    "Stiahnutý súbor nesedí s verziou na GitHube (možno sa práve zostavuje novšia). Skús to o pár minút.");
+                    L.T("Stiahnutý súbor nesedí s verziou na GitHube (možno sa práve zostavuje novšia). Skús to o pár minút.",
+                        "The downloaded file does not match the version on GitHub (a newer one may be building). Try again in a few minutes."));
             return path;
         }
         catch (Exception ex)
@@ -188,17 +189,20 @@ public static class Updater
     private static void EnsureFound(HttpResponseMessage response)
     {
         if (response.StatusCode == HttpStatusCode.NotFound)
-            throw new UpdateException("Na GitHube teraz nie je žiadna verzia (možno sa práve zostavuje). Skús to o pár minút.");
+            throw new UpdateException(L.T("Na GitHube teraz nie je žiadna verzia (možno sa práve zostavuje). Skús to o pár minút.",
+                "There is no version on GitHub right now (it may be building). Try again in a few minutes."));
         if (!response.IsSuccessStatusCode)
-            throw new UpdateException($"GitHub odpovedal chybou {(int)response.StatusCode}. Skús to neskôr.");
+            throw new UpdateException(L.T($"GitHub odpovedal chybou {(int)response.StatusCode}. Skús to neskôr.", $"GitHub returned error {(int)response.StatusCode}. Try again later."));
     }
 
     private static UpdateException Offline(Exception ex) =>
-        new("Nepodarilo sa spojiť s GitHubom. Skontroluj pripojenie na internet.", ex);
+        new(L.T("Nepodarilo sa spojiť s GitHubom. Skontroluj pripojenie na internet.", "Could not connect to GitHub. Check your internet connection."), ex);
 
     private static UpdateException NotWritable(string path, Exception ex) =>
-        new($"Do priečinka s programom sa nedá zapisovať ({Path.GetDirectoryName(Path.GetFullPath(path))}). " +
-            "Presuň program napr. na Plochu alebo stiahni novú verziu ručne.", ex);
+        new(L.T($"Do priečinka s programom sa nedá zapisovať ({Path.GetDirectoryName(Path.GetFullPath(path))}). " +
+                "Presuň program napr. na Plochu alebo stiahni novú verziu ručne.",
+                $"The program folder is not writable ({Path.GetDirectoryName(Path.GetFullPath(path))}). " +
+                "Move the program, e.g. to the Desktop, or download the new version manually."), ex);
 
     private static bool TryDelete(string path)
     {

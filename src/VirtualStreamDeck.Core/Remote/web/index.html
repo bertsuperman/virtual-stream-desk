@@ -88,11 +88,11 @@
   <span id="title">STREAM DECK</span>
   <select id="profile" hidden aria-label="Profil"></select>
   <span class="spacer"></span>
-  <button class="icon-btn" id="rot" title="Na šírku / na výšku" aria-label="Otočiť">⟲</button>
-  <button class="icon-btn" id="fs" title="Celá obrazovka" aria-label="Celá obrazovka">⛶</button>
+  <button class="icon-btn" id="rot">⟲</button>
+  <button class="icon-btn" id="fs">⛶</button>
 </header>
 <main><div id="grid"></div></main>
-<div id="overlay"><h1 id="ov-title">Pripájam…</h1><p id="ov-text"></p></div>
+<div id="overlay"><h1 id="ov-title"></h1><p id="ov-text"></p></div>
 <div id="toast"></div>
 </div>
 
@@ -113,6 +113,19 @@
 
   let ws = null, deck = null, seq = 0, retry = 0, retryTimer = null;
   const pending = new Map();
+
+  // ───────── language (the PC sends it; <html lang> is set by the server) ─────────
+  let lang = document.documentElement.lang === "en" ? "en" : "sk";
+  const T = (sk, en) => lang === "en" ? en : sk;
+  function applyLang() {
+    document.documentElement.lang = lang;
+    for (const [id, sk, en] of [["rot", "Na šírku / na výšku", "Landscape / portrait"], ["fs", "Celá obrazovka", "Full screen"]]) {
+      $(id).title = T(sk, en);
+      $(id).setAttribute("aria-label", T(sk, en));
+    }
+  }
+  applyLang();
+  overlay(T("Pripájam…", "Connecting…"));
 
   function overlay(titleText, text) {
     $("ov-title").textContent = titleText;
@@ -136,7 +149,8 @@
   async function connect() {
     clearTimeout(retryTimer);
     if (!token) {
-      overlay("Naskenuj QR kód", "Otvor na PC Stream Deck → Nastavenia → Mobil a naskenuj QR kód.");
+      overlay(T("Naskenuj QR kód", "Scan the QR code"),
+        T("Otvor na PC Stream Deck → Nastavenia → Mobil a naskenuj QR kód.", "On the PC open Stream Deck → Settings → Phone and scan the QR code."));
       return;
     }
     if (ws && ws.readyState <= 1) return;
@@ -144,7 +158,8 @@
       const r = await fetch("/api/ping?t=" + encodeURIComponent(token), { cache: "no-store" });
       if (r.status === 401) {
         setStatus("off");
-        overlay("Neplatný QR kód", "Kód bol medzitým zmenený. Naskenuj nový v Stream Decku → Nastavenia → Mobil.");
+        overlay(T("Neplatný QR kód", "Invalid QR code"),
+          T("Kód bol medzitým zmenený. Naskenuj nový v Stream Decku → Nastavenia → Mobil.", "The code has been changed. Scan the new one in Stream Deck → Settings → Phone."));
         return;
       }
     } catch (e) {
@@ -156,7 +171,11 @@
     ws.onopen = () => { retry = 0; setStatus("on"); overlay(null); };
     ws.onmessage = e => {
       const msg = JSON.parse(e.data);
-      if (msg.type === "deck") { deck = msg; render(); }
+      if (msg.type === "deck") {
+        deck = msg;
+        if (msg.lang && msg.lang !== lang) { lang = msg.lang; applyLang(); }
+        render();
+      }
       else if (msg.type === "result") onResult(msg);
     };
     ws.onclose = () => { setStatus("off"); scheduleRetry(); };
@@ -165,7 +184,8 @@
 
   function scheduleRetry() {
     setStatus("off");
-    if (!deck) overlay("Pripájam…", "Hľadám Stream Deck v sieti. PC aj mobil musia byť v rovnakej Wi-Fi.");
+    if (!deck) overlay(T("Pripájam…", "Connecting…"),
+      T("Hľadám Stream Deck v sieti. PC aj mobil musia byť v rovnakej Wi-Fi.", "Looking for Stream Deck on the network. The PC and the phone must be on the same Wi-Fi."));
     const delay = [500, 1000, 2000, 4000][Math.min(retry++, 3)];
     clearTimeout(retryTimer);
     retryTimer = setTimeout(connect, delay);
@@ -251,7 +271,7 @@
     e.preventDefault();
     tile.classList.add("down");
     if (navigator.vibrate) navigator.vibrate(12);
-    if (!ws || ws.readyState !== 1) { toast("Nie som pripojený k PC."); return; }
+    if (!ws || ws.readyState !== 1) { toast(T("Nie som pripojený k PC.", "Not connected to the PC.")); return; }
     const id = ++seq;
     pending.set(id, tile);
     ws.send(JSON.stringify({ type: "press", id: tile.dataset.id, seq: id }));
@@ -267,7 +287,7 @@
     tile.classList.add(cls);
     setTimeout(() => tile.classList.remove(cls), msg.ok ? 250 : 1500);
     if (!msg.ok) {
-      toast(msg.error || "Akcia zlyhala.");
+      toast(msg.error || T("Akcia zlyhala.", "The action failed."));
       if (navigator.vibrate) navigator.vibrate([40, 60, 40]);
     }
   }
@@ -311,8 +331,8 @@
   $("fs").addEventListener("click", () => {
     const el = document.documentElement;
     if (document.fullscreenElement) document.exitFullscreen();
-    else if (el.requestFullscreen) el.requestFullscreen().then(lockLandscape).catch(() => toast("Celá obrazovka nie je dostupná. Skús „Pridať na plochu“."));
-    else toast("Pre celú obrazovku daj v prehliadači „Pridať na plochu“.");
+    else if (el.requestFullscreen) el.requestFullscreen().then(lockLandscape).catch(() => toast(T("Celá obrazovka nie je dostupná. Skús „Pridať na plochu“.", "Full screen is not available. Try \"Add to Home Screen\".")));
+    else toast(T("Pre celú obrazovku daj v prehliadači „Pridať na plochu“.", "For full screen use \"Add to Home Screen\" in the browser."));
   });
   if (window.matchMedia("(display-mode: standalone)").matches) { $("fs").hidden = true; lockLandscape(); }
 

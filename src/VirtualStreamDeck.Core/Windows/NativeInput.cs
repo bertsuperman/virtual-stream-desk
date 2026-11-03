@@ -122,7 +122,8 @@ internal static class NativeInput
         {
             var err = new Win32Exception(Marshal.GetLastWin32Error()).Message;
             throw new InvalidOperationException(
-                "Klávesy sa nepodarilo odoslať. Ak cieľová aplikácia beží ako správca, spusti aj Stream Deck ako správca. (" + err + ")");
+                L.T("Klávesy sa nepodarilo odoslať. Ak cieľová aplikácia beží ako správca, spusti aj Stream Deck ako správca. (",
+                    "Could not send the keys. If the target app runs as administrator, run Stream Deck as administrator too. (") + err + ")");
         }
     }
 

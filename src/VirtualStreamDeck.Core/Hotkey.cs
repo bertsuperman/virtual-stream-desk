@@ -36,7 +36,7 @@ public readonly record struct Hotkey(HotkeyModifiers Modifiers, int VirtualKey)
     }
 
     public static Hotkey Parse(string text) =>
-        TryParse(text, out var hk) ? hk : throw new FormatException($"Neplatná skratka: '{text}'");
+        TryParse(text, out var hk) ? hk : throw new FormatException(L.T($"Neplatná skratka: '{text}'", $"Invalid shortcut: '{text}'"));
 
     public static bool TryParse(string? text, out Hotkey hotkey)
     {

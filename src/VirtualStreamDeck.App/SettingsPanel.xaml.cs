@@ -38,6 +38,12 @@ public partial class SettingsPanel : UserControl
     /// <summary>Raised when the user clicks the collapse arrow.</summary>
     public event Action? CollapseRequested;
 
+    private void ShowGuideLanguage()
+    {
+        GuideSk.Visibility = L.Current == Language.Sk ? Visibility.Visible : Visibility.Collapsed;
+        GuideEn.Visibility = L.Current == Language.En ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     public string CurrentSection => (Nav.SelectedItem as ListBoxItem)?.Tag as string ?? Profiles;
 
     internal void Initialize(Deck deck, ObsClient obs, RemoteServer remote, UpdateService updates)
@@ -55,6 +61,8 @@ public partial class SettingsPanel : UserControl
         LabelsBox.IsChecked = s.ShowLabels;
         AutostartBox.IsChecked = s.StartWithWindows;
         AutoUpdateBox.IsChecked = s.CheckForUpdates;
+        LanguageBox.SelectedIndex = L.Current == Language.En ? 1 : 0;
+        ShowGuideLanguage();
         VersionText.Text = $"{AppInfo.ProductName} {AppInfo.Version}\n{deck.Store.Directory}";
         ObsHostBox.Text = s.Obs.Host;
         ObsPortBox.Text = s.Obs.Port.ToString();
@@ -79,6 +87,24 @@ public partial class SettingsPanel : UserControl
         };
 
         AutoUpdateBox.Click += (_, _) => Apply();
+        LanguageBox.SelectionChanged += (_, _) =>
+        {
+            if (_loading || (LanguageBox.SelectedItem as ComboBoxItem)?.Tag is not string code) return;
+            var language = L.Parse(code) ?? Language.Sk;
+            L.Set(language); // every window re-reads its texts
+            _deck.Update(c => c.Settings.Language = L.Code(language)); // phones get the new language too
+        };
+        L.Changed += () =>
+        {
+            ShowGuideLanguage();
+            bool wasLoading = _loading;
+            _loading = true;
+            LanguageBox.SelectedIndex = L.Current == Language.En ? 1 : 0;
+            _loading = wasLoading;
+            RefreshFromDeck();
+            RefreshUpdate();
+            ObsStatus.Text = "";
+        };
         _updates.Changed += RefreshUpdate;
         RefreshUpdate();
 
@@ -132,7 +158,7 @@ public partial class SettingsPanel : UserControl
         var config = _deck.Config;
         RowsSlider.Value = config.Rows;
         ColumnsSlider.Value = config.Columns;
-        GridTitle.Text = $"Mriežka profilu „{config.ActiveProfile.Name}“";
+        GridTitle.Text = L.T("Mriežka profilu ", "Grid of profile ") + MainWindow.Quote(config.ActiveProfile.Name);
         UpdateHiddenInfo();
         RefreshProfiles();
         RefreshRemote();
@@ -172,8 +198,10 @@ public partial class SettingsPanel : UserControl
         var config = _deck.Config;
         int hidden = config.Buttons.Count(b => !config.IsVisible(b));
         HiddenInfo.Text = hidden == 0
-            ? "Tlačidlá presunieš ťahaním myšou. Pravý klik na tlačidlo ho upraví."
-            : $"Mimo mriežky je {hidden} tlačidiel. Nevymazali sa – po zväčšení mriežky sa vrátia.";
+            ? L.T("Tlačidlá presunieš ťahaním myšou. Pravý klik na tlačidlo ho upraví.",
+                "Drag buttons with the mouse to move them. Right-click a button to edit it.")
+            : L.T($"Mimo mriežky je {hidden} tlačidiel. Nevymazali sa – po zväčšení mriežky sa vrátia.",
+                $"{hidden} buttons are outside the grid. They were not deleted and come back when the grid grows.");
     }
 
     // ───────────────────────── updates ─────────────────────────
@@ -184,19 +212,21 @@ public partial class SettingsPanel : UserControl
         var info = u.Available;
         bool busy = u.Current is UpdateService.State.Checking or UpdateService.State.Downloading or UpdateService.State.Restarting;
         UpdateButton.IsEnabled = !busy;
-        UpdateButton.Content = info != null ? $"Aktualizovať na {info.Version}" : "Skontrolovať teraz";
+        UpdateButton.Content = info != null
+            ? L.T($"Aktualizovať na {info.Version}", $"Update to {info.Version}")
+            : L.T("Skontrolovať teraz", "Check now");
 
         UpdateStatus.ClearValue(TextBlock.ForegroundProperty);
         switch (u.Current)
         {
             case UpdateService.State.Checking:
-                UpdateStatus.Text = "Kontrolujem…";
+                UpdateStatus.Text = L.T("Kontrolujem…", "Checking…");
                 break;
             case UpdateService.State.Downloading:
-                UpdateStatus.Text = $"Sťahujem verziu {info?.Version}… {u.Percent} %";
+                UpdateStatus.Text = L.T($"Sťahujem verziu {info?.Version}… {u.Percent} %", $"Downloading version {info?.Version}… {u.Percent} %");
                 break;
             case UpdateService.State.Restarting:
-                UpdateStatus.Text = "Spúšťam novú verziu…";
+                UpdateStatus.Text = L.T("Spúšťam novú verziu…", "Starting the new version…");
                 break;
             case UpdateService.State.Error:
                 UpdateStatus.Foreground = ErrorBrush;
@@ -204,16 +234,17 @@ public partial class SettingsPanel : UserControl
                 break;
             case UpdateService.State.UpToDate:
                 UpdateStatus.Foreground = OkBrush;
-                UpdateStatus.Text = $"Máš najnovšiu verziu ({AppInfo.Version}).";
+                UpdateStatus.Text = L.T($"Máš najnovšiu verziu ({AppInfo.Version}).", $"You have the latest version ({AppInfo.Version}).");
                 break;
             case UpdateService.State.Available when info != null:
                 UpdateStatus.Foreground = OkBrush;
-                UpdateStatus.Text = $"Je dostupná nová verzia {info.Version} (teraz máš {AppInfo.Version}).";
+                UpdateStatus.Text = L.T($"Je dostupná nová verzia {info.Version} (teraz máš {AppInfo.Version}).",
+                    $"Version {info.Version} is available (you have {AppInfo.Version}).");
                 break;
             default:
                 UpdateStatus.Text = UpdateService.IsDevBuild
-                    ? "Vývojová verzia: automaticky sa nekontroluje."
-                    : $"Teraz máš verziu {AppInfo.Version}.";
+                    ? L.T("Vývojová verzia: automaticky sa nekontroluje.", "Development build: no automatic checks.")
+                    : L.T($"Teraz máš verziu {AppInfo.Version}.", $"You have version {AppInfo.Version}.");
                 break;
         }
     }
@@ -239,7 +270,8 @@ public partial class SettingsPanel : UserControl
         var activeId = config.ActiveProfile.Id;
         var items = config.Profiles.Select(p => new ProfileItem(p.Id,
             (p.Id == activeId ? "✓  " : "     ") + p.Name +
-            $"   ·   {p.Buttons.Count} {Plural(p.Buttons.Count, "tlačidlo", "tlačidlá", "tlačidiel")}")).ToList();
+            $"   ·   {p.Buttons.Count} " +
+            L.T(Plural(p.Buttons.Count, "tlačidlo", "tlačidlá", "tlačidiel"), p.Buttons.Count == 1 ? "button" : "buttons"))).ToList();
 
         bool wasLoading = _loading;
         _loading = true;
@@ -270,7 +302,7 @@ public partial class SettingsPanel : UserControl
 
     private void ProfileNew_Click(object sender, RoutedEventArgs e)
     {
-        _deck.Update(c => c.ActiveProfileId = c.AddProfile(c.UniqueProfileName("Nový profil")).Id);
+        _deck.Update(c => c.ActiveProfileId = c.AddProfile(c.UniqueProfileName(L.T("Nový profil", "New profile"))).Id);
         RefreshFromDeck();
         ProfileNameBox.Focus();
         ProfileNameBox.SelectAll();
@@ -281,8 +313,14 @@ public partial class SettingsPanel : UserControl
         _deck.Update(c =>
         {
             var source = c.ActiveProfile;
-            c.ActiveProfileId = c.DuplicateProfile(source.Id, c.UniqueProfileName(source.Name + " (kópia)")).Id;
+            c.ActiveProfileId = c.DuplicateProfile(source.Id, c.UniqueProfileName(source.Name + L.T(" (kópia)", " (copy)"))).Id;
         });
+        RefreshFromDeck();
+    }
+
+    private void ProfileSound_Click(object sender, RoutedEventArgs e)
+    {
+        _deck.Update(c => c.ActiveProfileId = c.AddMediaProfile().Id);
         RefreshFromDeck();
     }
 
@@ -291,13 +329,14 @@ public partial class SettingsPanel : UserControl
         var profile = _deck.Config.ActiveProfile;
         if (_deck.Config.Profiles.Count <= 1)
         {
-            MessageBox.Show(Owner!, "Posledný profil sa vymazať nedá.", AppInfo.ProductName,
+            MessageBox.Show(Owner!, L.T("Posledný profil sa vymazať nedá.", "The last profile cannot be deleted."), AppInfo.ProductName,
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         var answer = MessageBox.Show(Owner!,
-            $"Vymazať profil „{profile.Name}“ aj s jeho {profile.Buttons.Count} tlačidlami?",
-            "Vymazať profil", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+            L.T($"Vymazať profil „{profile.Name}“ aj s jeho {profile.Buttons.Count} tlačidlami?",
+                $"Delete the profile \"{profile.Name}\" with its {profile.Buttons.Count} buttons?"),
+            L.T("Vymazať profil", "Delete profile"), MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
         if (answer != MessageBoxResult.Yes) return;
         var id = profile.Id;
         _deck.Update(c => c.RemoveProfile(id));
@@ -355,7 +394,7 @@ public partial class SettingsPanel : UserControl
         RemoteStatus.ClearValue(TextBlock.ForegroundProperty);
         if (!r.Enabled)
         {
-            RemoteStatus.Text = "Vypnuté.";
+            RemoteStatus.Text = L.T("Vypnuté.", "Off.");
         }
         else if (_remote.LastError is { } error)
         {
@@ -365,19 +404,21 @@ public partial class SettingsPanel : UserControl
         else if (AddressBox.Items.Count == 0)
         {
             RemoteStatus.Foreground = ErrorBrush;
-            RemoteStatus.Text = "PC nie je pripojené k žiadnej sieti.";
+            RemoteStatus.Text = L.T("PC nie je pripojené k žiadnej sieti.", "The PC is not connected to any network.");
         }
         else if (_remote.IsRunning)
         {
             int n = _remote.ClientCount;
             RemoteStatus.Foreground = OkBrush;
             RemoteStatus.Text = n == 0
-                ? $"Beží na porte {_remote.Port}. Zatiaľ nie je pripojené žiadne zariadenie."
-                : $"Beží na porte {_remote.Port}. Pripojené: {n} {Plural(n, "zariadenie", "zariadenia", "zariadení")}.";
+                ? L.T($"Beží na porte {_remote.Port}. Zatiaľ nie je pripojené žiadne zariadenie.",
+                    $"Running on port {_remote.Port}. No device connected yet.")
+                : L.T($"Beží na porte {_remote.Port}. Pripojené: {n} {Plural(n, "zariadenie", "zariadenia", "zariadení")}.",
+                    $"Running on port {_remote.Port}. Connected: {n} {(n == 1 ? "device" : "devices")}.");
         }
         else
         {
-            RemoteStatus.Text = "Spúšťam…";
+            RemoteStatus.Text = L.T("Spúšťam…", "Starting…");
         }
     }
 
@@ -408,8 +449,9 @@ public partial class SettingsPanel : UserControl
     private void NewToken_Click(object sender, RoutedEventArgs e)
     {
         var answer = MessageBox.Show(Owner!,
-            "Vytvoriť nový QR kód? Všetky pripojené mobily sa odpoja a budú musieť naskenovať nový kód.",
-            "Nový kód", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+            L.T("Vytvoriť nový QR kód? Všetky pripojené mobily sa odpoja a budú musieť naskenovať nový kód.",
+                "Create a new QR code? All connected phones are disconnected and have to scan the new code."),
+            L.T("Nový kód", "New code"), MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
         if (answer == MessageBoxResult.Yes) ApplyRemote(c => c.Settings.Remote.Token = RemoteSettings.NewToken());
     }
 
@@ -431,13 +473,13 @@ public partial class SettingsPanel : UserControl
     private async void ObsTest_Click(object sender, RoutedEventArgs e)
     {
         ObsStatus.ClearValue(TextBlock.ForegroundProperty);
-        ObsStatus.Text = "Pripájam…";
+        ObsStatus.Text = L.T("Pripájam…", "Connecting…");
         try
         {
             _obs.Configure(_deck.Config.Settings.Obs);
             var version = await _obs.TestAsync();
             ObsStatus.Foreground = OkBrush;
-            ObsStatus.Text = $"Pripojené, OBS {version}";
+            ObsStatus.Text = L.T($"Pripojené, OBS {version}", $"Connected, OBS {version}");
         }
         catch (Exception ex)
         {

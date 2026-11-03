@@ -21,7 +21,7 @@ public sealed class WindowsActionExecutor : IActionExecutor
                 return Task.CompletedTask;
             case KeysAction keys:
                 if (!Hotkey.TryParse(keys.Keys, out var hk))
-                    throw new InvalidOperationException($"Neplatná klávesová skratka: '{keys.Keys}'.");
+                    throw new InvalidOperationException(L.T($"Neplatná klávesová skratka: '{keys.Keys}'.", $"Invalid key combination: '{keys.Keys}'."));
                 NativeInput.SendChord(hk);
                 return Task.CompletedTask;
             case MediaAction media:
@@ -30,14 +30,14 @@ public sealed class WindowsActionExecutor : IActionExecutor
             case ObsAction obs:
                 return _obs.ExecuteAsync(obs);
             default:
-                throw new InvalidOperationException("Neznámy typ akcie.");
+                throw new InvalidOperationException(L.T("Neznámy typ akcie.", "Unknown action type."));
         }
     }
 
     private static void Open(OpenAction action)
     {
         var target = Environment.ExpandEnvironmentVariables(action.Target.Trim().Trim('"'));
-        if (target.Length == 0) throw new InvalidOperationException("Nie je zadané, čo sa má otvoriť.");
+        if (target.Length == 0) throw new InvalidOperationException(L.T("Nie je zadané, čo sa má otvoriť.", "Nothing to open is set."));
 
         var psi = new ProcessStartInfo(target) { UseShellExecute = true };
         if (!string.IsNullOrWhiteSpace(action.Args))
@@ -51,7 +51,7 @@ public sealed class WindowsActionExecutor : IActionExecutor
         }
         catch (Win32Exception ex)
         {
-            throw new InvalidOperationException($"Nedá sa otvoriť „{target}“: {ex.Message}");
+            throw new InvalidOperationException(L.T($"Nedá sa otvoriť „{target}“: {ex.Message}", $"Cannot open \"{target}\": {ex.Message}"));
         }
     }
 }

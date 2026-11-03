@@ -59,7 +59,7 @@ public sealed class QrCode
     {
         int version = 1;
         while (version <= MaxVersion && data.Length > MaxPayloadBytes(version)) version++;
-        if (version > MaxVersion) throw new ArgumentException($"Text je pre QR kód príliš dlhý ({data.Length} B).");
+        if (version > MaxVersion) throw new ArgumentException(L.T($"Text je pre QR kód príliš dlhý ({data.Length} B).", $"The text is too long for a QR code ({data.Length} B)."));
 
         var qr = new QrCode(version);
         var codewords = qr.AddErrorCorrection(qr.EncodeData(data));

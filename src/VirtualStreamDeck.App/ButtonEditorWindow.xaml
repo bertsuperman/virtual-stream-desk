@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:c="clr-namespace:VirtualStreamDeck.App.Controls"
-        Title="Tlačidlo"
+        xmlns:l="clr-namespace:VirtualStreamDeck.App"
+        Title="{l:T 'Tlačidlo', 'Button'}"
         Width="540"
         SizeToContent="Height"
         ResizeMode="NoResize"
@@ -40,7 +41,7 @@
         </Grid.RowDefinitions>
 
         <!-- Icon -->
-        <TextBlock Grid.Row="0" Text="Ikona" Style="{StaticResource FieldLabel}" />
+        <TextBlock Grid.Row="0" Text="{l:T 'Ikona', 'Icon'}" Style="{StaticResource FieldLabel}" />
         <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,14">
             <Border x:Name="IconDrop"
                     Width="76" Height="76"
@@ -51,7 +52,7 @@
                     AllowDrop="True"
                     DragOver="IconDrop_DragOver"
                     Drop="IconDrop_Drop"
-                    ToolTip="Sem môžeš pretiahnuť obrázok alebo program">
+                    ToolTip="{l:T 'Sem môžeš pretiahnuť obrázok alebo program', 'You can drop a picture or program here'}">
                 <Grid>
                     <Image x:Name="IconImage" Width="52" Height="52" RenderOptions.BitmapScalingMode="HighQuality" />
                     <TextBlock x:Name="IconPlaceholder"
@@ -64,43 +65,43 @@
                 </Grid>
             </Border>
             <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
-                <Button Content="Vybrať obrázok…" Click="PickIcon_Click" Margin="0,0,0,8" MinWidth="150" />
-                <Button Content="Bez ikony" Click="ClearIcon_Click" MinWidth="150" />
+                <Button Content="{l:T 'Vybrať obrázok…', 'Choose picture…'}" Click="PickIcon_Click" Margin="0,0,0,8" MinWidth="150" />
+                <Button Content="{l:T 'Bez ikony', 'No icon'}" Click="ClearIcon_Click" MinWidth="150" />
             </StackPanel>
         </StackPanel>
 
         <!-- Label -->
-        <TextBlock Grid.Row="1" Text="Popis" Style="{StaticResource FieldLabel}" />
+        <TextBlock Grid.Row="1" Text="{l:T 'Popis', 'Label'}" Style="{StaticResource FieldLabel}" />
         <TextBox Grid.Row="1" Grid.Column="1" x:Name="LabelBox" Margin="0,0,0,14" />
 
         <!-- Action type -->
-        <TextBlock Grid.Row="2" Text="Akcia" Style="{StaticResource FieldLabel}" />
+        <TextBlock Grid.Row="2" Text="{l:T 'Akcia', 'Action'}" Style="{StaticResource FieldLabel}" />
         <ComboBox Grid.Row="2" Grid.Column="1" x:Name="ActionTypeBox" Margin="0,0,0,14"
                   HorizontalAlignment="Stretch"
                   SelectionChanged="ActionTypeBox_SelectionChanged">
-            <ComboBoxItem Tag="open" Content="Otvoriť program, súbor alebo web" />
-            <ComboBoxItem Tag="keys" Content="Stlačiť klávesovú skratku" />
-            <ComboBoxItem Tag="media" Content="Médiá a hlasitosť" />
+            <ComboBoxItem Tag="open" Content="{l:T 'Otvoriť program, súbor alebo web', 'Open a program, file or website'}" />
+            <ComboBoxItem Tag="keys" Content="{l:T 'Stlačiť klávesovú skratku', 'Press a key combination'}" />
+            <ComboBoxItem Tag="media" Content="{l:T 'Médiá a hlasitosť', 'Media and volume'}" />
             <ComboBoxItem Tag="obs" Content="OBS Studio" />
-            <ComboBoxItem Tag="profile" Content="Prepnúť profil" />
+            <ComboBoxItem Tag="profile" Content="{l:T 'Prepnúť profil', 'Switch profile'}" />
         </ComboBox>
 
         <!-- Action details -->
         <Grid Grid.Row="3" Grid.Column="1" Margin="0,0,0,18">
             <StackPanel x:Name="OpenPanel">
                 <DockPanel>
-                    <Button DockPanel.Dock="Right" Content="Priečinok…" Click="BrowseFolder_Click" Margin="6,0,0,0" />
-                    <Button DockPanel.Dock="Right" Content="Súbor…" Click="BrowseFile_Click" Margin="6,0,0,0" />
+                    <Button DockPanel.Dock="Right" Content="{l:T 'Priečinok…', 'Folder…'}" Click="BrowseFolder_Click" Margin="6,0,0,0" />
+                    <Button DockPanel.Dock="Right" Content="{l:T 'Súbor…', 'File…'}" Click="BrowseFile_Click" Margin="6,0,0,0" />
                     <TextBox x:Name="TargetBox" />
                 </DockPanel>
-                <TextBlock Style="{StaticResource Hint}" Text="Program, odkaz, súbor, priečinok alebo adresa webu (https://…)." />
-                <TextBlock Text="Argumenty (nepovinné)" Margin="0,12,0,6" Opacity="0.85" />
+                <TextBlock Style="{StaticResource Hint}" Text="{l:T 'Program, odkaz, súbor, priečinok alebo adresa webu (https://…).', 'Program, shortcut, file, folder or web address (https://…).'}" />
+                <TextBlock Text="{l:T 'Argumenty (nepovinné)', 'Arguments (optional)'}" Margin="0,12,0,6" Opacity="0.85" />
                 <TextBox x:Name="ArgsBox" />
             </StackPanel>
 
             <StackPanel x:Name="KeysPanel" Visibility="Collapsed">
                 <c:HotkeyBox x:Name="KeysBox" />
-                <TextBlock Style="{StaticResource Hint}" Text="Skratka sa pošle do okna, v ktorom práve pracuješ (napr. Ctrl+Shift+M pre mute v Teams)." />
+                <TextBlock Style="{StaticResource Hint}" Text="{l:T 'Skratka sa pošle do okna, v ktorom práve pracuješ (napr. Ctrl+Shift+M pre mute v Teams).', 'The keys go to the window you are working in (e.g. Ctrl+Shift+M to mute in Teams).'}" />
             </StackPanel>
 
             <StackPanel x:Name="MediaPanel" Visibility="Collapsed">
@@ -110,7 +111,7 @@
             <StackPanel x:Name="ProfilePanel" Visibility="Collapsed">
                 <ComboBox x:Name="ProfileBox" HorizontalAlignment="Stretch" DisplayMemberPath="Name" />
                 <TextBlock Style="{StaticResource Hint}"
-                           Text="Ako priečinok na Stream Decku: v cieľovom profile si daj tlačidlo späť. Nové profily vytvoríš v Nastavenia → Profily." />
+                           Text="{l:T 'Ako priečinok na Stream Decku: v cieľovom profile si daj tlačidlo späť. Nové profily vytvoríš v Nastavenia → Profily.', 'Like a folder on a Stream Deck: put a button back in the target profile. Create new profiles in Settings → Profiles.'}" />
             </StackPanel>
 
             <StackPanel x:Name="ObsPanel" Visibility="Collapsed">
@@ -118,36 +119,36 @@
                           SelectionChanged="ObsCommandBox_SelectionChanged" />
 
                 <StackPanel x:Name="ObsSceneRow" Margin="0,12,0,0">
-                    <TextBlock x:Name="ObsSceneLabel" Text="Scéna" Margin="0,0,0,6" Opacity="0.85" />
+                    <TextBlock x:Name="ObsSceneLabel" Text="{l:T 'Scéna', 'Scene'}" Margin="0,0,0,6" Opacity="0.85" />
                     <ComboBox x:Name="ObsSceneBox" IsEditable="True" HorizontalAlignment="Stretch"
                               SelectionChanged="ObsSceneBox_SelectionChanged" />
                 </StackPanel>
 
                 <StackPanel x:Name="ObsSourceRow" Margin="0,12,0,0">
-                    <TextBlock x:Name="ObsSourceLabel" Text="Zdroj" Margin="0,0,0,6" Opacity="0.85" />
+                    <TextBlock x:Name="ObsSourceLabel" Text="{l:T 'Zdroj', 'Source'}" Margin="0,0,0,6" Opacity="0.85" />
                     <ComboBox x:Name="ObsSourceBox" IsEditable="True" HorizontalAlignment="Stretch" />
                 </StackPanel>
 
                 <DockPanel x:Name="ObsRefreshRow" Margin="0,10,0,0">
-                    <Button DockPanel.Dock="Right" Content="Načítať z OBS" Click="ObsRefresh_Click" Margin="10,0,0,0" />
+                    <Button DockPanel.Dock="Right" Content="{l:T 'Načítať z OBS', 'Load from OBS'}" Click="ObsRefresh_Click" Margin="10,0,0,0" />
                     <TextBlock x:Name="ObsStatus" Style="{StaticResource Hint}" Margin="0" VerticalAlignment="Center" />
                 </DockPanel>
             </StackPanel>
         </Grid>
 
         <!-- Global hotkey -->
-        <TextBlock Grid.Row="4" Text="Klávesová&#x0a;skratka" Style="{StaticResource FieldLabel}" />
+        <TextBlock Grid.Row="4" Text="{l:T 'Klávesová&#x0a;skratka', 'Hotkey'}" Style="{StaticResource FieldLabel}" />
         <DockPanel Grid.Row="4" Grid.Column="1">
-            <Button DockPanel.Dock="Right" Content="Zrušiť" Click="ClearHotkey_Click" Margin="6,0,0,0" />
+            <Button DockPanel.Dock="Right" Content="{l:T 'Zrušiť', 'Cancel'}" Click="ClearHotkey_Click" Margin="6,0,0,0" />
             <c:HotkeyBox x:Name="GlobalHotkeyBox" />
         </DockPanel>
         <TextBlock Grid.Row="5" Grid.Column="1" x:Name="HotkeyHint" Style="{StaticResource Hint}" Margin="0,6,0,20" />
 
         <!-- Buttons -->
         <DockPanel Grid.Row="6" Grid.ColumnSpan="2" LastChildFill="False">
-            <Button DockPanel.Dock="Left" x:Name="DeleteButton" Content="Vymazať tlačidlo" Click="Delete_Click" />
-            <Button DockPanel.Dock="Right" Content="Zrušiť" IsCancel="True" MinWidth="90" Margin="8,0,0,0" />
-            <Button DockPanel.Dock="Right" Content="Uložiť" IsDefault="True" Click="Save_Click" MinWidth="90" />
+            <Button DockPanel.Dock="Left" x:Name="DeleteButton" Content="{l:T 'Vymazať tlačidlo', 'Delete button'}" Click="Delete_Click" />
+            <Button DockPanel.Dock="Right" Content="{l:T 'Zrušiť', 'Cancel'}" IsCancel="True" MinWidth="90" Margin="8,0,0,0" />
+            <Button DockPanel.Dock="Right" Content="{l:T 'Uložiť', 'Save'}" IsDefault="True" Click="Save_Click" MinWidth="90" />
         </DockPanel>
     </Grid>
 </Window>

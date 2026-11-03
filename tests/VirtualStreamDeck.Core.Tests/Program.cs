@@ -665,6 +665,65 @@ static class Tests
         Assert.Equal(1, server.Connections, "single connection");
     }
 
+    // ───────── Language / starter buttons ─────────
+
+    public static void Language_PicksTextAndParsesCodes()
+    {
+        try
+        {
+            L.Set(Language.En);
+            Assert.Equal("Main", DeckConfig.DefaultProfileName, "english default profile");
+            Assert.Equal("The button does not exist.", L.T("Tlačidlo neexistuje.", "The button does not exist."));
+            L.Set(Language.Sk);
+            Assert.Equal("Hlavný", DeckConfig.DefaultProfileName, "slovak default profile");
+            Assert.Equal(Language.En, L.Parse(" EN "), "parse en");
+            Assert.Equal(Language.Sk, L.Parse("sk"), "parse sk");
+            Assert.True(L.Parse(null) == null && L.Parse("de") == null, "unknown codes");
+            Assert.Equal("en", L.Code(Language.En));
+        }
+        finally
+        {
+            L.Set(Language.Sk);
+        }
+    }
+
+    public static async Task Language_ErrorsFollowTheLanguage()
+    {
+        using var dir = new TempDir();
+        var deck = new Deck(new ConfigStore(dir.Path), new FakeExecutor());
+        deck.Load();
+        try
+        {
+            L.Set(Language.En);
+            var result = await deck.PressAsync("missing");
+            Assert.Equal("The button does not exist.", result.Error, "english error");
+        }
+        finally
+        {
+            L.Set(Language.Sk);
+        }
+    }
+
+    public static void Starter_MediaButtonsInFirstRow()
+    {
+        var c = new DeckConfig();
+        c.Normalize();
+        var p = c.ActiveProfile;
+        p.Buttons.Add(new DeckButton { Row = 0, Col = 1, Label = "mine" });
+        DeckConfig.AddMediaButtons(p);
+        Assert.Equal(6, p.Buttons.Count, "5 added + existing kept");
+        Assert.Equal(1, p.Buttons.Count(b => b.Row == 0 && b.Col == 1), "existing cell not overwritten");
+        Assert.True(p.Buttons.Where(b => b.Action is MediaAction).Select(b => b.Col).SequenceEqual(new[] { 0, 2, 3, 4, 5 }), "skips taken cell");
+        Assert.Equal(6, p.Columns, "grid widened to fit");
+        var commands = p.Buttons.Select(b => b.Action).OfType<MediaAction>().Select(m => m.Command).ToArray();
+        Assert.True(commands.SequenceEqual(new[] { MediaCommand.PlayPause, MediaCommand.Next, MediaCommand.VolumeDown, MediaCommand.VolumeUp, MediaCommand.Mute }), "commands");
+
+        var sound = c.AddMediaProfile();
+        Assert.Equal("Zvuk", sound.Name);
+        Assert.Equal(5, sound.Buttons.Count, "sound profile buttons");
+        Assert.Equal("Zvuk 2", c.AddMediaProfile().Name, "unique name");
+    }
+
     // ───────── Updater ─────────
 
     public static void Update_ParsesManifest()
