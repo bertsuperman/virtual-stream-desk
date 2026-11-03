@@ -27,24 +27,44 @@
   /* The whole app lives in #app. Held upright, it is rotated 90° so the deck is always landscape. */
   #app {
     position: fixed; left: 0; top: 0; width: var(--app-w, 100vw); height: var(--app-h, 100vh);
-    display: flex; flex-direction: column; overflow: hidden;
+    display: flex; flex-direction: row; overflow: hidden;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
   body.rotated #app { transform-origin: 0 0; transform: translateX(var(--vw)) rotate(90deg); padding: 0; }
-  header { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 12px; flex: none; }
+  /* Rail on the left, like the PC app: connection, profile, rotate, full screen */
+  #rail {
+    width: 64px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0 10px;
+    background: #1c1c21; border-right: 1px solid #2a2a30;
+  }
+  .content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; transition: background .2s; }
   .dot.on { background: var(--ok); }
   .dot.off { background: var(--error); }
-  #title { font-weight: 600; letter-spacing: .02em; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #profile {
-    appearance: none; -webkit-appearance: none; background: var(--tile); color: var(--text); border: 0; border-radius: 10px;
-    font: inherit; font-weight: 600; padding: 8px 30px 8px 12px; max-width: 55vw; text-overflow: ellipsis;
-    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-    background-position: calc(100% - 16px) 52%, calc(100% - 11px) 52%; background-size: 5px 5px; background-repeat: no-repeat;
+  /* Profile: name in the rail; with more profiles an invisible <select> on top opens the native picker */
+  #profile-btn {
+    position: relative; width: 54px; margin-top: 6px; padding: 7px 3px 6px; border-radius: 10px; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--text);
   }
+  #profile-btn.many { background: var(--tile); }
+  #profile-btn .ico { font-size: 18px; line-height: 1; }
+  #pname {
+    font-size: 11px; font-weight: 600; line-height: 1.2; max-width: 50px; word-break: break-word;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  #profile-btn .more { font-size: 9px; color: var(--muted); line-height: 1; }
+  #profile { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; font-size: 16px; }
   .spacer { flex: 1; }
-  .icon-btn { background: none; border: 0; color: var(--muted); font-size: 20px; width: 40px; height: 40px; border-radius: 10px; }
+  .icon-btn { background: none; border: 0; color: var(--muted); font-size: 20px; width: 42px; height: 42px; border-radius: 10px; }
   .icon-btn:active { background: var(--tile); }
+  /* "Add to home screen" hint (only in the browser, not in the home-screen app) */
+  #hint {
+    display: flex; align-items: center; gap: 10px; margin: 10px 12px 0; padding: 9px 8px 9px 14px; border-radius: 12px;
+    background: #1f2a40; border: 1px solid #2f4470; color: #cfe0ff; font-size: 13px; flex: none;
+  }
+  #hint[hidden] { display: none; }
+  #hint-text { flex: 1; }
+  #hint b { color: #fff; }
+  #hint-close { background: none; border: 0; color: #9fb7e8; font-size: 18px; width: 34px; height: 34px; border-radius: 8px; flex: none; }
   main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 8px 12px 12px; touch-action: none; min-height: 0; }
   #grid { display: grid; gap: var(--gap); grid-template-columns: repeat(var(--cols), var(--size)); grid-auto-rows: var(--size); }
   .tile {
@@ -83,15 +103,22 @@
 </head>
 <body>
 <div id="app">
-<header>
+<nav id="rail">
   <span class="dot" id="dot"></span>
-  <span id="title">STREAM DECK</span>
-  <select id="profile" hidden aria-label="Profil"></select>
+  <div id="profile-btn">
+    <span class="ico">📂</span>
+    <span id="pname">Stream Deck</span>
+    <span class="more" hidden>▼</span>
+    <select id="profile" hidden></select>
+  </div>
   <span class="spacer"></span>
   <button class="icon-btn" id="rot">⟲</button>
   <button class="icon-btn" id="fs">⛶</button>
-</header>
-<main><div id="grid"></div></main>
+</nav>
+<div class="content">
+  <div id="hint" hidden><span id="hint-text"></span><button id="hint-close" aria-label="OK">✕</button></div>
+  <main><div id="grid"></div></main>
+</div>
 <div id="overlay"><h1 id="ov-title"></h1><p id="ov-text"></p></div>
 <div id="toast"></div>
 </div>
@@ -100,7 +127,7 @@
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
-  const grid = $("grid"), dot = $("dot"), profileSel = $("profile"), title = $("title");
+  const grid = $("grid"), dot = $("dot"), profileSel = $("profile"), pname = $("pname");
 
   // The token comes from the QR code (?t=…). Remember it and remove it from the address bar.
   const params = new URLSearchParams(location.search);
@@ -119,11 +146,34 @@
   const T = (sk, en) => lang === "en" ? en : sk;
   function applyLang() {
     document.documentElement.lang = lang;
-    for (const [id, sk, en] of [["rot", "Na šírku / na výšku", "Landscape / portrait"], ["fs", "Celá obrazovka", "Full screen"]]) {
+    for (const [id, sk, en] of [["rot", "Na šírku / na výšku", "Landscape / portrait"], ["fs", "Celá obrazovka", "Full screen"],
+                                ["profile", "Profil", "Profile"]]) {
       $(id).title = T(sk, en);
       $(id).setAttribute("aria-label", T(sk, en));
     }
+    $("hint-text").innerHTML = hintHtml();
   }
+
+  // ───────── "add to home screen" = full screen ─────────
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  function hintHtml() {
+    return ios
+      ? T("Pre celú obrazovku si daj deck na plochu: <b>Zdieľať ⬆︎ → Pridať na plochu</b> a otváraj ho odtiaľ.",
+          "For full screen, add the deck to your home screen: <b>Share ⬆︎ → Add to Home Screen</b> and open it from there.")
+      : T("Pre celú obrazovku si daj deck na plochu: <b>⋮ → Pridať na plochu</b> a otváraj ho odtiaľ.",
+          "For full screen, add the deck to your home screen: <b>⋮ → Add to Home screen</b> and open it from there.");
+  }
+  function showHint(show) {
+    $("hint").hidden = !show;
+    if (deck) layout();
+  }
+  let hintDismissed = false;
+  try { hintDismissed = localStorage.getItem("vsd-hint") === "0"; } catch (e) {}
+  $("hint-close").addEventListener("click", () => {
+    try { localStorage.setItem("vsd-hint", "0"); } catch (e) {}
+    showHint(false);
+  });
   applyLang();
   overlay(T("Pripájam…", "Connecting…"));
 
@@ -209,8 +259,10 @@
   function render() {
     // Profiles
     const profiles = deck.profiles || [];
-    profileSel.hidden = profiles.length < 2;
-    title.hidden = !profileSel.hidden;
+    const many = profiles.length > 1;
+    profileSel.hidden = !many;
+    $("profile-btn").classList.toggle("many", many);
+    document.querySelector("#profile-btn .more").hidden = !many;
     profileSel.innerHTML = "";
     for (const p of profiles) {
       const o = document.createElement("option");
@@ -218,7 +270,8 @@
       if (p.id === deck.activeProfile) o.selected = true;
       profileSel.appendChild(o);
     }
-    if (profiles.length === 1) title.textContent = profiles[0].name.toUpperCase();
+    const active = profiles.find(p => p.id === deck.activeProfile) || profiles[0];
+    pname.textContent = active ? active.name : "Stream Deck";
 
     // Grid
     const byCell = new Map(deck.buttons.map(b => [b.row + ":" + b.col, b]));
@@ -331,10 +384,11 @@
   $("fs").addEventListener("click", () => {
     const el = document.documentElement;
     if (document.fullscreenElement) document.exitFullscreen();
-    else if (el.requestFullscreen) el.requestFullscreen().then(lockLandscape).catch(() => toast(T("Celá obrazovka nie je dostupná. Skús „Pridať na plochu“.", "Full screen is not available. Try \"Add to Home Screen\".")));
-    else toast(T("Pre celú obrazovku daj v prehliadači „Pridať na plochu“.", "For full screen use \"Add to Home Screen\" in the browser."));
+    else if (el.requestFullscreen) el.requestFullscreen().then(lockLandscape).catch(() => showHint(true));
+    else showHint(true); // iPhone: only the home-screen app can be full screen
   });
-  if (window.matchMedia("(display-mode: standalone)").matches) { $("fs").hidden = true; lockLandscape(); }
+  if (standalone) { $("fs").hidden = true; lockLandscape(); }
+  else showHint(!hintDismissed);
 
   window.addEventListener("resize", fit);
   window.addEventListener("orientationchange", () => setTimeout(fit, 100));
