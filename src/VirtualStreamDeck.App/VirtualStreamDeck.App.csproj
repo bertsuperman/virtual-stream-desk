@@ -27,7 +27,7 @@
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
-    <!-- Only for "--screenshots" (renders the windows to PNG files without a screen, used by CI). -->
+    <!-- Only for the screenshots mode (renders the windows to PNG files without a screen, used by CI). -->
     <PackageReference Include="Avalonia.Headless" Version="$(AvaloniaVersion)" />
   </ItemGroup>
 
