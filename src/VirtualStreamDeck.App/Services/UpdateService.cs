@@ -1,10 +1,12 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Threading;
+using Avalonia.Controls;
+using Avalonia.Threading;
+using VirtualStreamDeck.App.UI;
 using VirtualStreamDeck.Core;
 using VirtualStreamDeck.Core.Update;
 
@@ -40,21 +42,28 @@ internal sealed class UpdateService
     /// <summary>Local builds are 0.2.0: they don't look for updates on their own.</summary>
     public static bool IsDevBuild => AppInfo.Version is "0.2.0" or "0.0.0";
 
+    /// <summary>Where the app lives: the .exe on Windows, the .app folder on a Mac (null when run from a build folder).</summary>
+    private string? InstallTarget => OperatingSystem.IsMacOS() ? Updater.BundleOf(_exe) : _exe;
+
     public event Action? Changed;
 
     public void Start()
     {
-        if (_exe != null) Updater.Cleanup(_exe);
+        Cleanup();
         _timer.Start();
         // Give the app (and a just-replaced old instance) a moment before going online.
-        var delay = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
-        delay.Tick += async (_, _) =>
+        DispatcherTimer.RunOnce(async () =>
         {
-            delay.Stop();
-            if (_exe != null) Updater.Cleanup(_exe); // the old instance has exited by now
+            Cleanup(); // the old instance has exited by now
             await AutoCheckAsync();
-        };
-        delay.Start();
+        }, TimeSpan.FromSeconds(8));
+    }
+
+    private void Cleanup()
+    {
+        if (InstallTarget is not { } target) return;
+        if (OperatingSystem.IsMacOS()) Updater.CleanupMacBundle(target);
+        else Updater.Cleanup(target);
     }
 
     private async Task AutoCheckAsync()
@@ -74,6 +83,8 @@ internal sealed class UpdateService
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             var info = await Updater.CheckAsync(Http, AppInfo.Version, ct: cts.Token);
+            // A release without a file for this computer (e.g. Mac build still missing) is not offered.
+            if (info != null && Updater.AssetForCurrentPlatform() is { } asset && info.HashOf(asset) == null) info = null;
             Available = info;
             Set(info != null ? State.Available : State.UpToDate);
         }
@@ -89,22 +100,23 @@ internal sealed class UpdateService
         }
     }
 
-    /// <summary>Asks, downloads, swaps the exe and starts the new build (which then replaces this instance).</summary>
+    /// <summary>Asks, downloads, swaps the app and starts the new build (which then replaces this instance).</summary>
     public async Task ConfirmAndInstallAsync(Window? owner)
     {
-        if (Available is not { } info || Current is State.Downloading or State.Restarting || _exe == null) return;
+        if (Available is not { } info || Current is State.Downloading or State.Restarting) return;
+        if (InstallTarget is not { } target || Updater.AssetForCurrentPlatform() is not { } asset)
+        {
+            Error = L.T("Táto kópia sa nedá aktualizovať sama (spustená mimo appky). Stiahni novú verziu ručne.",
+                "This copy can't update itself (not started as an app). Download the new version manually.");
+            Set(State.Error);
+            return;
+        }
 
-        var text = L.T($"Aktualizovať na verziu {info.Version}?\n\n" +
-                       $"Teraz máš {AppInfo.Version}. Stream Deck sa na pár sekúnd zavrie a sám sa znova spustí. " +
-                       "Tlačidlá a nastavenia ostanú.",
-                       $"Update to version {info.Version}?\n\n" +
-                       $"You have {AppInfo.Version}. Stream Deck closes for a few seconds and starts again by itself. " +
-                       "Buttons and settings stay.");
-        var title = L.T("Aktualizácia", "Update");
-        var answer = owner != null
-            ? MessageBox.Show(owner, text, title, MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes)
-            : MessageBox.Show(text, title, MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes);
-        if (answer != MessageBoxResult.Yes) return;
+        bool yes = await Dialogs.ConfirmAsync(owner, L.T("Aktualizácia", "Update"),
+            L.T($"Aktualizovať na verziu {info.Version}?\n\nTeraz máš {AppInfo.Version}. Stream Deck sa na pár sekúnd zavrie a sám sa znova spustí. Tlačidlá a nastavenia ostanú.",
+                $"Update to version {info.Version}?\n\nYou have {AppInfo.Version}. Stream Deck closes for a few seconds and starts again by itself. Buttons and settings stay."),
+            defaultYes: true);
+        if (!yes) return;
 
         Percent = 0;
         Set(State.Downloading);
@@ -116,8 +128,17 @@ internal sealed class UpdateService
                 Percent = p;
                 Changed?.Invoke();
             });
-            var downloaded = await Updater.DownloadAsync(Http, info, _exe, progress, ct: cts.Token);
-            Updater.Install(downloaded, _exe);
+            if (OperatingSystem.IsMacOS())
+            {
+                var zip = Path.Combine(Path.GetTempPath(), "VirtualStreamDeck-update.zip");
+                await Updater.DownloadAssetAsync(Http, info, asset, zip, progress, ct: cts.Token);
+                await Task.Run(() => Updater.InstallMacBundle(zip, target));
+            }
+            else
+            {
+                var downloaded = await Updater.DownloadAsync(Http, info, target, progress, ct: cts.Token);
+                Updater.Install(downloaded, target);
+            }
         }
         catch (Exception ex) when (ex is UpdateException or OperationCanceledException)
         {
@@ -130,7 +151,8 @@ internal sealed class UpdateService
         try
         {
             // The new build sees a different version and asks this instance to quit (SingleInstance).
-            Process.Start(new ProcessStartInfo(_exe) { UseShellExecute = false });
+            if (OperatingSystem.IsMacOS()) Process.Start("/usr/bin/open", new[] { "-n", target });
+            else Process.Start(new ProcessStartInfo(target) { UseShellExecute = false });
         }
         catch (Exception ex)
         {

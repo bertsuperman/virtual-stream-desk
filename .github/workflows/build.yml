@@ -8,12 +8,16 @@ on:
 permissions:
   contents: write
 
+env:
+  VERSION: 0.3.${{ github.run_number }}
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
@@ -29,33 +33,140 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
           -p:DebugType=none
-          -p:Version=0.2.${{ github.run_number }}
+          -p:Version=${{ env.VERSION }}
           -o publish
-
-      # Read by the app's self-update: line 1 version, line 2 SHA-256 of the exe.
-      - name: Write version.txt
-        shell: pwsh
-        run: |
-          $hash = (Get-FileHash publish/VirtualStreamDeck.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "0.2.${{ github.run_number }}`n$hash" | Set-Content publish/version.txt -NoNewline -Encoding ascii
-          Get-Content publish/version.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VirtualStreamDeck-win-x64
-          path: |
-            publish/VirtualStreamDeck.exe
-            publish/version.txt
+          name: windows
+          path: publish/VirtualStreamDeck.exe
+
+  mac:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [arm64, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish
+        run: >
+          dotnet publish src/VirtualStreamDeck.App -c Release -r osx-${{ matrix.arch }}
+          --self-contained true
+          -p:DebugType=none
+          -p:Version=${{ env.VERSION }}
+          -o publish
+
+      - name: Build "Virtual Stream Deck.app"
+        run: |
+          APP="dist/Virtual Stream Deck.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp -R publish/. "$APP/Contents/MacOS/"
+          chmod +x "$APP/Contents/MacOS/VirtualStreamDeck"
+
+          # Icon: every size iconutil wants, from the 192 px app icon.
+          mkdir icon.iconset
+          for s in 16 32 128 256 512; do
+            sips -z $s $s src/VirtualStreamDeck.App/Assets/app.png --out icon.iconset/icon_${s}x${s}.png > /dev/null
+            d=$((s * 2))
+            sips -z $d $d src/VirtualStreamDeck.App/Assets/app.png --out icon.iconset/icon_${s}x${s}@2x.png > /dev/null
+          done
+          iconutil -c icns icon.iconset -o "$APP/Contents/Resources/app.icns"
+
+          cat > "$APP/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>Virtual Stream Deck</string>
+            <key>CFBundleDisplayName</key><string>Virtual Stream Deck</string>
+            <key>CFBundleIdentifier</key><string>sk.bertsuperman.virtualstreamdeck</string>
+            <key>CFBundleExecutable</key><string>VirtualStreamDeck</string>
+            <key>CFBundleIconFile</key><string>app.icns</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+            <key>CFBundleVersion</key><string>${VERSION}</string>
+            <key>LSMinimumSystemVersion</key><string>12.0</string>
+            <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          EOF
+
+          # No Apple Developer ID: ad-hoc signature (required on Apple Silicon). First start: Privacy & Security → Open Anyway.
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+          ditto -c -k --keepParent "$APP" "VirtualStreamDeck-mac-${{ matrix.arch }}.zip"
+          ls -la *.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-${{ matrix.arch }}
+          path: VirtualStreamDeck-mac-${{ matrix.arch }}.zip
+
+  # Renders every window to PNG (no screen needed) and pushes them to the branch "ci-screens",
+  # so the UI can be looked at without a Windows or Mac machine.
+  screens:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Fonts
+        run: sudo apt-get install -y -qq fonts-dejavu-core fonts-noto-core > /dev/null
+      - name: Render
+        run: dotnet run --project src/VirtualStreamDeck.App -c Release -- --screenshots shots
+      - name: Push to ci-screens
+        if: github.event_name == 'push'
+        run: |
+          cd shots
+          git init -q -b ci-screens
+          git add .
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "Screenshots of ${GITHUB_REF_NAME} @ ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-screens
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # Read by the app's self-update: line 1 version, line 2 SHA-256 of the exe (what 0.2.x builds read),
+      # then "<file> <sha256>" for every other file.
+      - name: Write version.txt
+        run: |
+          cd dist
+          {
+            echo "${VERSION}"
+            sha256sum VirtualStreamDeck.exe | cut -d' ' -f1
+            for f in VirtualStreamDeck-mac-arm64.zip VirtualStreamDeck-mac-x64.zip; do
+              echo "$f $(sha256sum "$f" | cut -d' ' -f1)"
+            done
+          } > version.txt
+          cat version.txt
+          ls -la
 
       - name: Update "latest" release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          gh release delete latest --yes --cleanup-tag 2>$null
-          gh release create latest publish/VirtualStreamDeck.exe publish/version.txt `
-            --prerelease `
-            --target ${{ github.sha }} `
-            --title "Najnovšia verzia 0.2.${{ github.run_number }}" `
-            --notes "Automaticky zostavené z commitu ${{ github.sha }}. Stiahni VirtualStreamDeck.exe a spusti. Ak beží staršia verzia, nová ju sama nahradí. Od tejto verzie sa Stream Deck vie aktualizovať aj sám (zelená šípka alebo Nastavenia → Všeobecné)."
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest dist/VirtualStreamDeck.exe dist/VirtualStreamDeck-mac-arm64.zip dist/VirtualStreamDeck-mac-x64.zip dist/version.txt \
+            --prerelease \
+            --target ${{ github.sha }} \
+            --title "Najnovšia verzia ${VERSION}" \
+            --notes "Automaticky zostavené z commitu ${{ github.sha }}.
+
+          **Windows:** stiahni VirtualStreamDeck.exe a spusti. Ak beží staršia verzia, nová ju sama nahradí.
+          **Mac:** Apple Silicon (M1–M4) → VirtualStreamDeck-mac-arm64.zip, Intel → VirtualStreamDeck-mac-x64.zip. Rozbaľ, presuň do Aplikácií a pri prvom spustení povoľ v Nastavenia systému → Súkromie a bezpečnosť → Otvoriť aj tak.
+
+          Ďalšie verzie sa nainštalujú zo Stream Decku (zelená šípka alebo Nastavenia → Všeobecné)."

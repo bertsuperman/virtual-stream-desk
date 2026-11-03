@@ -64,9 +64,9 @@ public readonly record struct Hotkey(HotkeyModifiers Modifiers, int VirtualKey)
     private static HotkeyModifiers? ParseModifier(string s) => s.ToLowerInvariant() switch
     {
         "ctrl" or "control" or "ctl" => HotkeyModifiers.Ctrl,
-        "alt" => HotkeyModifiers.Alt,
+        "alt" or "option" or "opt" => HotkeyModifiers.Alt,
         "shift" => HotkeyModifiers.Shift,
-        "win" or "windows" or "meta" => HotkeyModifiers.Win,
+        "win" or "windows" or "meta" or "cmd" or "command" => HotkeyModifiers.Win, // Win on Windows = ⌘ on a Mac
         _ => null,
     };
 }

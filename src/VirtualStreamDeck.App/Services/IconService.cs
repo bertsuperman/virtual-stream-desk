@@ -1,11 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Windows;
-using System.Windows.Interop;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
+using System.Runtime.Versioning;
+using Avalonia;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using VirtualStreamDeck.Core;
 
 namespace VirtualStreamDeck.App.Services;
@@ -16,40 +17,30 @@ internal sealed class IconService
     private const int IconSize = 256;
 
     private static readonly string[] ImageExtensions =
-        { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".ico", ".tif", ".tiff", ".webp" };
+        { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".ico", ".webp", ".icns" };
 
     private readonly ConfigStore _store;
+    private readonly Dictionary<string, Bitmap?> _cache = new();
 
     public IconService(ConfigStore store) => _store = store;
 
     public static bool IsImageFile(string path) =>
-        ImageExtensions.Contains(Path.GetExtension(path).ToLowerInvariant());
+        ImageExtensions.Contains(Path.GetExtension(path).ToLowerInvariant()) && !path.EndsWith(".icns", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Makes an icon from any path: image files are imported as they are,
-    /// programs / shortcuts / files / folders use their Windows icon.
+    /// programs / shortcuts / apps / files / folders use their system icon.
     /// Returns the path to store in config ("icons/xyz.png") or null.
     /// </summary>
     public string? CreateFrom(string path) =>
-        IsImageFile(path) ? ImportImage(path) ?? ExtractShellIcon(path) : ExtractShellIcon(path);
+        IsImageFile(path) ? ImportImage(path) ?? SystemIcon(path) : SystemIcon(path);
 
     public string? ImportImage(string imagePath)
     {
         try
         {
-            var decoder = BitmapDecoder.Create(
-                new Uri(Path.GetFullPath(imagePath)),
-                BitmapCreateOptions.PreservePixelFormat | BitmapCreateOptions.IgnoreImageCache,
-                BitmapCacheOption.OnLoad);
-
-            BitmapSource frame = decoder.Frames.OrderByDescending(f => f.PixelWidth).First();
-            int longest = Math.Max(frame.PixelWidth, frame.PixelHeight);
-            if (longest > IconSize)
-            {
-                double scale = (double)IconSize / longest;
-                frame = new TransformedBitmap(frame, new ScaleTransform(scale, scale));
-            }
-            return SavePng(frame);
+            using var fs = File.OpenRead(imagePath);
+            return Save(new Bitmap(fs));
         }
         catch
         {
@@ -57,10 +48,42 @@ internal sealed class IconService
         }
     }
 
-    public string? ExtractShellIcon(string path)
+    private string? SystemIcon(string path)
     {
         if (!File.Exists(path) && !Directory.Exists(path)) return null;
+        try
+        {
+            if (OperatingSystem.IsWindows()) return WindowsShellIcon(path);
+            if (OperatingSystem.IsMacOS()) return MacIcon(path);
+        }
+        catch
+        {
+            // no icon then
+        }
+        return null;
+    }
 
+    /// <summary>
+    /// macOS: Quick Look renders the Finder icon of any app, file or folder (qlmanage ships with macOS).
+    /// </summary>
+    private string? MacIcon(string path)
+    {
+        var tmp = Directory.CreateTempSubdirectory("vsd-icon-").FullName;
+        try
+        {
+            if (!ShellHelper.Run("/usr/bin/qlmanage", "-t", "-s", IconSize.ToString(), "-o", tmp, path)) return null;
+            var png = Directory.GetFiles(tmp, "*.png").FirstOrDefault();
+            return png == null ? null : ImportImage(png);
+        }
+        finally
+        {
+            try { Directory.Delete(tmp, recursive: true); } catch { /* ignore */ }
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private string? WindowsShellIcon(string path)
+    {
         IntPtr hbitmap = IntPtr.Zero;
         try
         {
@@ -69,13 +92,8 @@ internal sealed class IconService
             var size = new Win32.SIZE { cx = IconSize, cy = IconSize };
             int hr = factory.GetImage(size, Win32.SIIGBF_ICONONLY | Win32.SIIGBF_BIGGERSIZEOK, out hbitmap);
             Marshal.ReleaseComObject(factory);
-            if (hr != 0 || hbitmap == IntPtr.Zero) return ExtractAssociatedIcon(path);
-
-            return SavePng(FromHBitmap(hbitmap));
-        }
-        catch
-        {
-            return ExtractAssociatedIcon(path);
+            if (hr != 0 || hbitmap == IntPtr.Zero) return null;
+            return FromHBitmap(hbitmap) is { } bmp ? Save(bmp) : null;
         }
         finally
         {
@@ -83,34 +101,13 @@ internal sealed class IconService
         }
     }
 
-    /// <summary>Fallback: the classic 32x32 icon.</summary>
-    private string? ExtractAssociatedIcon(string path)
-    {
-        try
-        {
-            if (!File.Exists(path)) return null;
-            using var icon = System.Drawing.Icon.ExtractAssociatedIcon(path);
-            if (icon == null) return null;
-            var src = Imaging.CreateBitmapSourceFromHIcon(icon.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-            return SavePng(src);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Imaging.CreateBitmapSourceFromHBitmap drops the alpha channel (black background),
-    /// so copy the 32-bit DIB pixels ourselves.
-    /// </summary>
-    private static BitmapSource FromHBitmap(IntPtr hbitmap)
+    /// <summary>Copies the 32-bit DIB pixels (premultiplied BGRA, possibly bottom-up) into a bitmap.</summary>
+    [SupportedOSPlatform("windows")]
+    private static unsafe Bitmap? FromHBitmap(IntPtr hbitmap)
     {
         if (Win32.GetObject(hbitmap, Marshal.SizeOf<Win32.DIBSECTION>(), out var dib) == 0 ||
             dib.dsBm.bmBitsPixel != 32 || dib.dsBm.bmBits == IntPtr.Zero)
-        {
-            return Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-        }
+            return null;
 
         int width = dib.dsBm.bmWidth;
         int height = Math.Abs(dib.dsBm.bmHeight);
@@ -118,8 +115,7 @@ internal sealed class IconService
         var pixels = new byte[stride * height];
         Marshal.Copy(dib.dsBm.bmBits, pixels, 0, pixels.Length);
 
-        // Positive biHeight = bottom-up DIB.
-        if (dib.dsBmih.biHeight > 0)
+        if (dib.dsBmih.biHeight > 0) // bottom-up
         {
             var flipped = new byte[pixels.Length];
             for (int y = 0; y < height; y++)
@@ -129,50 +125,52 @@ internal sealed class IconService
 
         bool hasAlpha = false;
         for (int i = 3; i < pixels.Length; i += 4)
-        {
             if (pixels[i] != 0) { hasAlpha = true; break; }
-        }
         if (!hasAlpha)
-        {
             for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
-        }
 
-        var bmp = BitmapSource.Create(width, height, 96, 96,
-            hasAlpha ? PixelFormats.Pbgra32 : PixelFormats.Bgra32, null, pixels, stride);
-        bmp.Freeze();
-        return bmp;
+        fixed (byte* p = pixels)
+            return new Bitmap(PixelFormat.Bgra8888, AlphaFormat.Premul, (IntPtr)p, new PixelSize(width, height), new Vector(96, 96), stride);
     }
 
-    private string SavePng(BitmapSource source)
+    private string Save(Bitmap bitmap)
     {
+        var size = bitmap.PixelSize;
+        int longest = Math.Max(size.Width, size.Height);
+        if (longest > IconSize)
+        {
+            double scale = (double)IconSize / longest;
+            var scaled = bitmap.CreateScaledBitmap(
+                new PixelSize(Math.Max(1, (int)(size.Width * scale)), Math.Max(1, (int)(size.Height * scale))),
+                BitmapInterpolationMode.HighQuality);
+            bitmap.Dispose();
+            bitmap = scaled;
+        }
+
         Directory.CreateDirectory(_store.IconsDirectory);
         var fileName = Guid.NewGuid().ToString("N")[..12] + ".png";
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(source));
-        using (var fs = File.Create(Path.Combine(_store.IconsDirectory, fileName)))
-            encoder.Save(fs);
+        bitmap.Save(Path.Combine(_store.IconsDirectory, fileName));
+        bitmap.Dispose();
         return ConfigStore.IconRelativePath(fileName);
     }
 
-    /// <summary>Loads an icon without locking the file.</summary>
-    public BitmapSource? Load(string? relativePath)
+    /// <summary>Loads an icon (cached; icon files never change, new icons get new names).</summary>
+    public Bitmap? Load(string? relativePath)
     {
         var full = _store.ResolveIconPath(relativePath);
         if (full == null) return null;
+        if (_cache.TryGetValue(full, out var cached)) return cached;
+        Bitmap? bmp = null;
         try
         {
-            var img = new BitmapImage();
-            img.BeginInit();
-            img.CacheOption = BitmapCacheOption.OnLoad;
-            img.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            img.UriSource = new Uri(full);
-            img.EndInit();
-            img.Freeze();
-            return img;
+            using var fs = File.OpenRead(full);
+            bmp = new Bitmap(fs);
         }
         catch
         {
-            return null;
+            // unreadable: show the default glyph
         }
+        _cache[full] = bmp;
+        return bmp;
     }
 }

@@ -42,7 +42,9 @@ public sealed class ConfigStore
     public static string ResolveDirectory(string exeDirectory, string? appDataDirectory = null)
     {
         if (File.Exists(Path.Combine(exeDirectory, ConfigFileName))) return exeDirectory;
-        appDataDirectory ??= Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        appDataDirectory ??= OperatingSystem.IsMacOS()
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Application Support")
+            : Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         return Path.Combine(appDataDirectory, "VirtualStreamDeck");
     }
 

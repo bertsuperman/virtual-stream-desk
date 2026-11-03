@@ -3,17 +3,27 @@ using System.Security.Cryptography;
 
 namespace VirtualStreamDeck.Core.Update;
 
-/// <summary>A newer build published on GitHub.</summary>
-public sealed record UpdateInfo(string Version, string Sha256);
+/// <summary>A newer build published on GitHub. <paramref name="Assets"/>: file name → SHA-256.</summary>
+public sealed record UpdateInfo(string Version, string Sha256, IReadOnlyDictionary<string, string> Assets)
+{
+    public UpdateInfo(string version, string sha256)
+        : this(version, sha256, new Dictionary<string, string> { [Updater.ExeName] = sha256 })
+    {
+    }
+
+    /// <summary>SHA-256 of an asset, or null if this release doesn't have it.</summary>
+    public string? HashOf(string asset) => Assets.TryGetValue(asset, out var h) ? h : null;
+}
 
 public sealed class UpdateException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
 /// Self-update from the GitHub release "latest".
 ///
-/// CI publishes two assets: <c>VirtualStreamDeck.exe</c> and <c>version.txt</c>
-/// (line 1: version, line 2: SHA-256 of the exe). The app downloads the exe itself, so the file
-/// has no "downloaded from the internet" mark and SmartScreen does not warn about it.
+/// CI publishes <c>VirtualStreamDeck.exe</c>, the Mac apps zipped (<c>VirtualStreamDeck-mac-arm64.zip</c>,
+/// <c>VirtualStreamDeck-mac-x64.zip</c>) and <c>version.txt</c>: line 1 version, line 2 SHA-256 of the exe
+/// (what 0.2.8–0.2.15 read), then one "&lt;file&gt; &lt;sha256&gt;" line per file. The app downloads the
+/// update itself, so it has no "downloaded from the internet" mark: no SmartScreen / Gatekeeper warning.
 ///
 /// Install: the running exe is renamed to <c>*.old</c> (Windows allows renaming a running exe,
 /// not deleting it), the new file takes its name, the new build starts and takes over
@@ -26,6 +36,18 @@ public static class Updater
 
     public const string ManifestName = "version.txt";
     public const string ExeName = "VirtualStreamDeck.exe";
+    public const string MacArm64Name = "VirtualStreamDeck-mac-arm64.zip";
+    public const string MacX64Name = "VirtualStreamDeck-mac-x64.zip";
+
+    /// <summary>The file this computer needs: the exe on Windows, the zip for this Mac's processor.</summary>
+    public static string? AssetForCurrentPlatform()
+    {
+        if (OperatingSystem.IsWindows()) return ExeName;
+        if (OperatingSystem.IsMacOS())
+            return System.Runtime.InteropServices.RuntimeInformation.OSArchitecture ==
+                   System.Runtime.InteropServices.Architecture.Arm64 ? MacArm64Name : MacX64Name;
+        return null;
+    }
 
     private const string DownloadSuffix = ".download";
     private const string OldSuffix = ".old";
@@ -38,15 +60,24 @@ public static class Updater
         return http;
     }
 
-    /// <summary>"0.2.57\n&lt;sha256&gt;" → info, or null if the text is not a valid manifest.</summary>
+    /// <summary>"0.2.57\n&lt;exe sha256&gt;\n&lt;file&gt; &lt;sha256&gt;…" → info, or null if the text is not a valid manifest.</summary>
     public static UpdateInfo? ParseManifest(string text)
     {
         var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (lines.Length < 2 || !System.Version.TryParse(lines[0], out _)) return null;
         var hash = lines[1].ToLowerInvariant();
-        if (hash.Length != 64 || !hash.All(Uri.IsHexDigit)) return null;
-        return new UpdateInfo(lines[0], hash);
+        if (!IsHash(hash)) return null;
+
+        var assets = new Dictionary<string, string>(StringComparer.Ordinal) { [ExeName] = hash };
+        foreach (var line in lines.Skip(2))
+        {
+            var parts = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2 && IsHash(parts[1].ToLowerInvariant())) assets[parts[0]] = parts[1].ToLowerInvariant();
+        }
+        return new UpdateInfo(lines[0], hash, assets);
     }
+
+    private static bool IsHash(string s) => s.Length == 64 && s.All(Uri.IsHexDigit);
 
     public static bool IsNewer(string candidate, string current) =>
         System.Version.TryParse(candidate, out var c) &&
@@ -82,11 +113,18 @@ public static class Updater
     /// Downloads the exe next to <paramref name="targetExe"/> as <c>*.download</c> and checks its SHA-256.
     /// Returns the path of the verified file.
     /// </summary>
-    public static async Task<string> DownloadAsync(HttpClient http, UpdateInfo info, string targetExe,
+    public static Task<string> DownloadAsync(HttpClient http, UpdateInfo info, string targetExe,
+        IProgress<int>? progress = null, Uri? baseUri = null, CancellationToken ct = default) =>
+        DownloadAssetAsync(http, info, ExeName, targetExe + DownloadSuffix, progress, baseUri, ct);
+
+    /// <summary>Downloads one file of the release to <paramref name="path"/> and checks its SHA-256.</summary>
+    public static async Task<string> DownloadAssetAsync(HttpClient http, UpdateInfo info, string asset, string path,
         IProgress<int>? progress = null, Uri? baseUri = null, CancellationToken ct = default)
     {
-        var url = new Uri(baseUri ?? DefaultBaseUri, ExeName);
-        var path = targetExe + DownloadSuffix;
+        var expected = info.HashOf(asset)
+                       ?? throw new UpdateException(L.T("Táto verzia ešte nie je pre tento počítač. Skús to neskôr.",
+                           "This version is not available for this computer yet. Try again later."));
+        var url = new Uri(baseUri ?? DefaultBaseUri, asset);
         try
         {
             using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
@@ -115,7 +153,7 @@ public static class Updater
             }
 
             var actual = Convert.ToHexStringLower(hash.GetHashAndReset());
-            if (actual != info.Sha256)
+            if (actual != expected)
                 throw new UpdateException(
                     L.T("Stiahnutý súbor nesedí s verziou na GitHube (možno sa práve zostavuje novšia). Skús to o pár minút.",
                         "The downloaded file does not match the version on GitHub (a newer one may be building). Try again in a few minutes."));
@@ -154,6 +192,105 @@ public static class Updater
             try { File.Move(old, targetExe); } catch { /* best effort: the .old file is still there */ }
             TryDelete(downloaded);
             throw NotWritable(targetExe, ex);
+        }
+    }
+
+    // ───────────── macOS: the app is a folder (Stream Deck.app) ─────────────
+
+    /// <summary>".../Virtual Stream Deck.app/Contents/MacOS/VirtualStreamDeck" → ".../Virtual Stream Deck.app", or null.</summary>
+    public static string? BundleOf(string? executablePath)
+    {
+        for (var dir = executablePath == null ? null : Path.GetDirectoryName(executablePath); dir != null; dir = Path.GetDirectoryName(dir))
+            if (dir.EndsWith(".app", StringComparison.OrdinalIgnoreCase)) return dir;
+        return null;
+    }
+
+    /// <summary>
+    /// Unpacks the downloaded zip and swaps the .app folder: the running one becomes "*.app.old"
+    /// (a running app can be moved on macOS), the new one takes its place.
+    /// </summary>
+    public static void InstallMacBundle(string downloadedZip, string bundlePath)
+    {
+        bundlePath = Path.TrimEndingDirectorySeparator(bundlePath);
+        var parent = Path.GetDirectoryName(bundlePath)!;
+        var staging = Path.Combine(parent, $".vsd-update-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(staging);
+            Unzip(downloadedZip, staging);
+            var newApp = Directory.GetDirectories(staging, "*.app").FirstOrDefault()
+                         ?? throw new UpdateException(L.T("V stiahnutom balíku nie je appka. Skús to znova.",
+                             "The downloaded package has no app in it. Try again."));
+
+            var old = bundlePath + OldSuffix;
+            if (!TryDeleteDirectory(old)) old = $"{bundlePath}.{Guid.NewGuid():N}{OldSuffix}";
+            try
+            {
+                Directory.Move(bundlePath, old);
+            }
+            catch (Exception ex) when (ex is not UpdateException)
+            {
+                throw NotWritable(bundlePath, ex);
+            }
+            try
+            {
+                Directory.Move(newApp, bundlePath);
+            }
+            catch (Exception ex)
+            {
+                try { Directory.Move(old, bundlePath); } catch { /* best effort */ }
+                throw NotWritable(bundlePath, ex);
+            }
+        }
+        finally
+        {
+            TryDeleteDirectory(staging);
+            TryDelete(downloadedZip);
+        }
+    }
+
+    /// <summary>ditto on a Mac (keeps permissions, symlinks and signatures), ZipFile elsewhere (tests).</summary>
+    private static void Unzip(string zip, string destination)
+    {
+        if (OperatingSystem.IsMacOS() && File.Exists("/usr/bin/ditto"))
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("/usr/bin/ditto") { RedirectStandardError = true };
+            foreach (var a in new[] { "-x", "-k", zip, destination }) psi.ArgumentList.Add(a);
+            using var p = System.Diagnostics.Process.Start(psi)!;
+            p.WaitForExit();
+            if (p.ExitCode != 0) throw new UpdateException(L.T("Balík sa nepodarilo rozbaliť: ", "Could not unpack the package: ") + p.StandardError.ReadToEnd().Trim());
+            return;
+        }
+        System.IO.Compression.ZipFile.ExtractToDirectory(zip, destination);
+    }
+
+    /// <summary>Deletes "*.app.old" leftovers next to the bundle.</summary>
+    public static void CleanupMacBundle(string bundlePath)
+    {
+        bundlePath = Path.TrimEndingDirectorySeparator(bundlePath);
+        var parent = Path.GetDirectoryName(bundlePath);
+        if (parent == null) return;
+        try
+        {
+            foreach (var d in Directory.EnumerateDirectories(parent, Path.GetFileName(bundlePath) + "*" + OldSuffix)) TryDeleteDirectory(d);
+            foreach (var d in Directory.EnumerateDirectories(parent, ".vsd-update-*")) TryDeleteDirectory(d);
+        }
+        catch
+        {
+            // not readable: nothing to clean
+        }
+    }
+
+    private static bool TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 

@@ -1,24 +1,39 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    One UI for Windows and macOS (Avalonia). The UI is written in C# (no XAML).
+    Windows: published as one self-contained VirtualStreamDeck.exe (win-x64).
+    macOS: published for osx-arm64 and osx-x64 and wrapped into "Virtual Stream Deck.app" by CI.
+  -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <UseWPF>true</UseWPF>
-    <!-- Only for the tray icon (NotifyIcon). Implicit usings are off to avoid WPF/WinForms name clashes. -->
-    <UseWindowsForms>true</UseWindowsForms>
-    <ImplicitUsings>disable</ImplicitUsings>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>VirtualStreamDeck.App</RootNamespace>
     <AssemblyName>VirtualStreamDeck</AssemblyName>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Product>Virtual Stream Deck</Product>
-    <!-- CI overrides this with 0.2.<build number>; the running instance compares versions on startup. -->
+    <!-- CI overrides this with 0.<minor>.<build number>; the running instance compares versions on startup. -->
     <Version>0.2.0</Version>
-    <!-- WPF0001: Fluent ThemeMode is marked experimental.
-         WFO0003: WinForms wants DPI set in code; this is a WPF app, the manifest is the right place. -->
-    <NoWarn>$(NoWarn);WPF0001;WFO0003</NoWarn>
+    <AvaloniaVersion>11.3.*</AvaloniaVersion>
+    <!-- CA1416: platform code is guarded with OperatingSystem.IsWindows() / IsMacOS() at the call sites. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
+    <!-- Only for "--screenshots" (renders the windows to PNG files without a screen, used by CI). -->
+    <PackageReference Include="Avalonia.Headless" Version="$(AvaloniaVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\app.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\VirtualStreamDeck.Core\VirtualStreamDeck.Core.csproj" />

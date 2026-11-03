@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using VirtualStreamDeck.Core;
 using VirtualStreamDeck.Core.Obs;
 using VirtualStreamDeck.Core.Update;
+using VirtualStreamDeck.Core.Mac;
 
 // Tiny test runner without NuGet dependencies. Every public static void method of Tests is a test.
 int failed = 0, passed = 0;
@@ -842,6 +843,119 @@ static class Tests
         await ExpectUpdateError(() => Updater.DownloadAsync(http, info!, target, null, FakeReleaseHandler.Base), "nesedí");
         Assert.True(!File.Exists(target + ".download"), "corrupt file deleted");
         Assert.Equal("old exe", File.ReadAllText(target), "exe untouched");
+    }
+
+    // ───────── Mac ─────────
+
+    public static void Mac_KeysMapToMacKeyCodes()
+    {
+        Assert.Equal((ushort)0x00, MacKeys.ToMac(Hotkey.Parse("A").VirtualKey), "A");
+        Assert.Equal((ushort)0x2E, MacKeys.ToMac(Hotkey.Parse("M").VirtualKey), "M");
+        Assert.Equal((ushort)0x12, MacKeys.ToMac(Hotkey.Parse("1").VirtualKey), "1");
+        Assert.Equal((ushort)0x7A, MacKeys.ToMac(Hotkey.Parse("F1").VirtualKey), "F1");
+        Assert.Equal((ushort)0x69, MacKeys.ToMac(Hotkey.Parse("F13").VirtualKey), "F13");
+        Assert.Equal((ushort)0x24, MacKeys.ToMac(Hotkey.Parse("Enter").VirtualKey), "Return");
+        Assert.Equal((ushort)0x7E, MacKeys.ToMac(Hotkey.Parse("Up").VirtualKey), "Up");
+        Assert.True(MacKeys.ToMac(Hotkey.Parse("F21").VirtualKey) == null, "no F21 on a Mac");
+
+        // Every letter, digit, F1–F20, keypad key and punctuation key exists, and no two share a code.
+        var names = Enumerable.Range('A', 26).Select(c => ((char)c).ToString())
+            .Concat(Enumerable.Range(0, 10).Select(i => i.ToString()))
+            .Concat(Enumerable.Range(1, 20).Select(i => "F" + i))
+            .Concat(Enumerable.Range(0, 10).Select(i => "NumPad" + i))
+            .Concat(new[] { "Multiply", "Add", "Subtract", "Decimal", "Divide", "Plus", "Minus", "Comma", "Period",
+                "Slash", "Backslash", "Semicolon", "Quote", "Backtick", "OpenBracket", "CloseBracket", "Space", "Tab",
+                "Escape", "Backspace", "Delete", "Home", "End", "PageUp", "PageDown", "Left", "Right" });
+        var codes = new HashSet<ushort>();
+        foreach (var n in names)
+        {
+            var code = MacKeys.ToMac(Hotkey.Parse(n).VirtualKey);
+            Assert.True(code != null, $"{n} has a Mac key code");
+            Assert.True(codes.Add(code!.Value), $"{n}: code 0x{code:X2} used twice");
+            Assert.Equal(Hotkey.Parse(n).VirtualKey, MacKeys.FromMac(code.Value), $"{n} maps back");
+        }
+    }
+
+    public static void Mac_ModifiersAndDisplay()
+    {
+        var hk = Hotkey.Parse("Cmd+Option+Shift+K");
+        Assert.Equal("Alt+Shift+Win+K", hk.ToString(), "stored like on Windows");
+        Assert.Equal(MacKeys.CarbonCmd | MacKeys.CarbonOption | MacKeys.CarbonShift, MacKeys.CarbonModifiers(hk.Modifiers), "carbon");
+        Assert.Equal(MacKeys.CgCommand | MacKeys.CgOption | MacKeys.CgShift, MacKeys.CgFlags(hk.Modifiers), "cg flags");
+        Assert.Equal("⌥⇧⌘K", MacKeys.Display(hk), "display");
+        Assert.Equal("⌃⌘↩", MacKeys.Display(Hotkey.Parse("Ctrl+Win+Enter")), "display symbols");
+    }
+
+    public static void Mac_OpenArguments()
+    {
+        Assert.True(MacActionExecutor.SplitArgs("a \"b c\" d").SequenceEqual(new[] { "a", "b c", "d" }), "split");
+        Assert.True(MacActionExecutor.SplitArgs("  ").Count == 0, "empty");
+        Assert.True(MacActionExecutor.SplitArgs("\"\"").SequenceEqual(new[] { "" }), "explicit empty arg");
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Assert.Equal(home + "/Music", MacActionExecutor.ExpandHome("~/Music"), "home");
+        Assert.Equal("/Applications/Safari.app", MacActionExecutor.ExpandHome("/Applications/Safari.app"), "absolute");
+    }
+
+    public static void Update_ManifestListsEveryPlatform()
+    {
+        string h(char c) => new string(c, 64);
+        var info = Updater.ParseManifest($"0.3.1\n{h('a')}\n{Updater.MacArm64Name} {h('B')}\n{Updater.MacX64Name}  {h('c')}\njunk line\n");
+        Assert.Equal(h('a'), info!.Sha256, "line 2 stays the exe (old Windows builds read only that)");
+        Assert.Equal(h('a'), info.HashOf(Updater.ExeName), "exe");
+        Assert.Equal(h('b'), info.HashOf(Updater.MacArm64Name), "arm64, lower-cased");
+        Assert.Equal(h('c'), info.HashOf(Updater.MacX64Name), "x64");
+        Assert.True(info.HashOf("other.zip") == null, "unknown asset");
+        Assert.True(Updater.ParseManifest($"0.2.8\n{h('a')}")!.HashOf(Updater.MacArm64Name) == null, "old manifest: exe only");
+        Assert.Equal("/Applications/Virtual Stream Deck.app",
+            Updater.BundleOf("/Applications/Virtual Stream Deck.app/Contents/MacOS/VirtualStreamDeck"), "bundle of the executable");
+        Assert.True(Updater.BundleOf("/usr/local/bin/vsd") == null, "not in a bundle");
+    }
+
+    public static async Task Update_MacBundleIsSwapped()
+    {
+        using var dir = new TempDir();
+        var bundle = System.IO.Path.Combine(dir.Path, "Virtual Stream Deck.app");
+        Directory.CreateDirectory(System.IO.Path.Combine(bundle, "Contents", "MacOS"));
+        File.WriteAllText(System.IO.Path.Combine(bundle, "Contents", "MacOS", "VirtualStreamDeck"), "old");
+
+        // What CI uploads: the .app folder zipped (ditto -c -k --keepParent).
+        using var src = new TempDir();
+        var newApp = System.IO.Path.Combine(src.Path, "Virtual Stream Deck.app", "Contents", "MacOS");
+        Directory.CreateDirectory(newApp);
+        File.WriteAllText(System.IO.Path.Combine(newApp, "VirtualStreamDeck"), "new");
+        var zipBytesPath = System.IO.Path.Combine(dir.Path, "src.zip");
+        System.IO.Compression.ZipFile.CreateFromDirectory(src.Path, zipBytesPath);
+        var zip = File.ReadAllBytes(zipBytesPath);
+        File.Delete(zipBytesPath);
+
+        var hash = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(zip));
+        var info = new UpdateInfo("0.3.1", new string('a', 64), new Dictionary<string, string> { [Updater.MacArm64Name] = hash });
+        using var http = Updater.CreateHttpClient(new AssetHandler(new() { [Updater.MacArm64Name] = zip }));
+        var download = System.IO.Path.Combine(dir.Path, "update.zip");
+        await Updater.DownloadAssetAsync(http, info, Updater.MacArm64Name, download, null, FakeReleaseHandler.Base);
+        await ExpectUpdateError(() => Updater.DownloadAssetAsync(http, info, Updater.MacX64Name, download + "2", null, FakeReleaseHandler.Base),
+            "nie je pre tento počítač");
+
+        Updater.InstallMacBundle(download, bundle);
+        Assert.Equal("new", File.ReadAllText(System.IO.Path.Combine(bundle, "Contents", "MacOS", "VirtualStreamDeck")), "new app in place");
+        Assert.Equal("old", File.ReadAllText(System.IO.Path.Combine(bundle + ".old", "Contents", "MacOS", "VirtualStreamDeck")), "old kept as .app.old");
+        Assert.True(!File.Exists(download), "zip removed");
+        Assert.True(Directory.GetDirectories(dir.Path, ".vsd-update-*").Length == 0, "staging removed");
+
+        Updater.CleanupMacBundle(bundle);
+        Assert.True(!Directory.Exists(bundle + ".old"), ".app.old removed on next start");
+        Assert.True(Directory.Exists(bundle), "app stays");
+    }
+
+    private sealed class AssetHandler(Dictionary<string, byte[]> files) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var name = Uri.UnescapeDataString(request.RequestUri!.Segments[^1]);
+            return Task.FromResult(files.TryGetValue(name, out var body)
+                ? new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new ByteArrayContent(body) }
+                : new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+        }
     }
 
     private static async Task ExpectUpdateError(Func<Task> action, string expected)
