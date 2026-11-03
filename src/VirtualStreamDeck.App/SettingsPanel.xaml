@@ -167,6 +167,13 @@
                     <CheckBox x:Name="TopmostBox" Content="Vždy navrchu" Margin="0,0,0,6" />
                     <CheckBox x:Name="AutostartBox" Content="Spustiť so systémom Windows" Margin="0,0,0,20" />
 
+                    <TextBlock Text="Aktualizácie" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <CheckBox x:Name="AutoUpdateBox" Content="Kontrolovať nové verzie automaticky" Margin="0,0,0,8" />
+                    <Button x:Name="UpdateButton" Content="Skontrolovať teraz" HorizontalAlignment="Left" Click="Update_Click" />
+                    <TextBlock x:Name="UpdateStatus" Margin="0,8,0,4" TextWrapping="Wrap" FontSize="12" />
+                    <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,20"
+                               Text="Novú verziu stiahne priamo Stream Deck, takže Windows pri spustení nevyskočí s varovaním." />
+
                     <TextBlock Text="Konfigurácia" FontWeight="SemiBold" Margin="0,0,0,6" />
                     <TextBlock Style="{StaticResource Hint}" Margin="0,0,0,8"
                                Text="Tlačidlá, profily, ikony a nastavenia sú v jednom priečinku. Na zálohu ho stačí skopírovať." />
@@ -298,7 +305,8 @@
                     <TextBlock Text="Okno a lišta" Style="{StaticResource GuideTitle}" />
                     <TextBlock Style="{StaticResource GuideText}">
                         Klik na ikonu v lište vedľa hodín deck schová alebo ukáže, appka beží ďalej a skratky fungujú.
-                        Krížik okno úplne ukončí (opýta sa). Keď spustíš novšiu verziu, stará sa sama nahradí.
+                        Krížik okno úplne ukončí (opýta sa). Keď vyjde nová verzia, v pravom pruhu sa objaví
+                        <Bold>zelená šípka</Bold>. Klikni na ňu a Stream Deck sa sám aktualizuje a znova spustí.
                     </TextBlock>
                 </StackPanel>
             </Grid>

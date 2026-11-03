@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using VirtualStreamDeck.Core;
 using VirtualStreamDeck.Core.Obs;
+using VirtualStreamDeck.Core.Update;
 
 // Tiny test runner without NuGet dependencies. Every public static void method of Tests is a test.
 int failed = 0, passed = 0;
@@ -662,6 +663,139 @@ static class Tests
         for (int n = 0; n < 40; n++)
             Assert.Equal(n, results[n].GetProperty("echo").GetInt32(), $"response {n}");
         Assert.Equal(1, server.Connections, "single connection");
+    }
+
+    // ───────── Updater ─────────
+
+    public static void Update_ParsesManifest()
+    {
+        var hash = new string('a', 64);
+        var info = Updater.ParseManifest($"0.2.57\r\n{hash.ToUpperInvariant()}\r\n");
+        Assert.Equal("0.2.57", info?.Version, "version");
+        Assert.Equal(hash, info?.Sha256, "hash is lower-cased");
+        Assert.True(Updater.ParseManifest("") == null, "empty");
+        Assert.True(Updater.ParseManifest("latest\n" + hash) == null, "bad version");
+        Assert.True(Updater.ParseManifest("0.2.57\nabc") == null, "short hash");
+        Assert.True(Updater.ParseManifest("0.2.57\n" + new string('z', 64)) == null, "non-hex hash");
+    }
+
+    public static void Update_ComparesVersionsNumerically()
+    {
+        Assert.True(Updater.IsNewer("0.2.10", "0.2.9"), "10 > 9");
+        Assert.True(!Updater.IsNewer("0.2.9", "0.2.10"), "9 < 10");
+        Assert.True(!Updater.IsNewer("0.2.5", "0.2.5"), "same");
+        Assert.True(!Updater.IsNewer("0.2", "0.2.0"), "0.2 == 0.2.0");
+        Assert.True(Updater.IsNewer("0.3.1", "0.2.99"), "minor");
+        Assert.True(Updater.IsNewer("0.2.1", "dev"), "unparsable current");
+        Assert.True(!Updater.IsNewer("bogus", "0.2.1"), "unparsable candidate");
+    }
+
+    public static async Task Update_CheckFindsNewerBuildOnly()
+    {
+        var exe = System.Text.Encoding.UTF8.GetBytes("new exe");
+        using var http = Updater.CreateHttpClient(new FakeReleaseHandler("0.2.60", exe));
+        Assert.Equal("0.2.60", (await Updater.CheckAsync(http, "0.2.57", FakeReleaseHandler.Base))?.Version, "newer");
+        Assert.True(await Updater.CheckAsync(http, "0.2.60", FakeReleaseHandler.Base) == null, "same version");
+        Assert.True(await Updater.CheckAsync(http, "0.2.61", FakeReleaseHandler.Base) == null, "running a newer one");
+    }
+
+    public static async Task Update_CheckErrorsAreReadable()
+    {
+        using var missing = Updater.CreateHttpClient(new FakeReleaseHandler(null, []));
+        await ExpectUpdateError(() => Updater.CheckAsync(missing, "0.2.1", FakeReleaseHandler.Base), "nie je žiadna verzia");
+
+        using var offline = Updater.CreateHttpClient(new FakeReleaseHandler("0.2.60", [], offline: true));
+        await ExpectUpdateError(() => Updater.CheckAsync(offline, "0.2.1", FakeReleaseHandler.Base), "internet");
+    }
+
+    public static async Task Update_DownloadInstallAndCleanup()
+    {
+        using var dir = new TempDir();
+        var target = System.IO.Path.Combine(dir.Path, "VirtualStreamDeck.exe");
+        File.WriteAllText(target, "old exe");
+
+        var exe = new byte[300_000];
+        new Random(1).NextBytes(exe);
+        var handler = new FakeReleaseHandler("0.2.60", exe);
+        using var http = Updater.CreateHttpClient(handler);
+        var info = await Updater.CheckAsync(http, "0.2.57", FakeReleaseHandler.Base);
+
+        var percents = new List<int>();
+        var downloaded = await Updater.DownloadAsync(http, info!, target, new SyncProgress(percents.Add), FakeReleaseHandler.Base);
+        Assert.Equal(target + ".download", downloaded, "download path");
+        Assert.True(percents.Count > 0 && percents[^1] == 100, "progress reaches 100 %");
+        Assert.Equal("old exe", File.ReadAllText(target), "running exe untouched until install");
+
+        Updater.Install(downloaded, target);
+        Assert.True(File.ReadAllBytes(target).AsSpan().SequenceEqual(exe), "new exe in place");
+        Assert.Equal("old exe", File.ReadAllText(target + ".old"), "old exe kept as .old");
+        Assert.True(!File.Exists(downloaded), "no .download left");
+
+        // A second update while the first .old still exists replaces it.
+        var again = await Updater.DownloadAsync(http, info!, target, null, FakeReleaseHandler.Base);
+        Updater.Install(again, target);
+        Assert.True(File.ReadAllBytes(target + ".old").AsSpan().SequenceEqual(exe), ".old is the previous exe");
+
+        File.WriteAllText(target + ".download", "half");
+        Updater.Cleanup(target);
+        Assert.True(!File.Exists(target + ".old") && !File.Exists(target + ".download"), "leftovers removed");
+        Assert.True(File.Exists(target), "exe itself stays");
+    }
+
+    public static async Task Update_RejectsCorruptDownload()
+    {
+        using var dir = new TempDir();
+        var target = System.IO.Path.Combine(dir.Path, "VirtualStreamDeck.exe");
+        File.WriteAllText(target, "old exe");
+        var handler = new FakeReleaseHandler("0.2.60", "real"u8.ToArray()) { ServeExe = "tampered"u8.ToArray() };
+        using var http = Updater.CreateHttpClient(handler);
+        var info = await Updater.CheckAsync(http, "0.2.57", FakeReleaseHandler.Base);
+        await ExpectUpdateError(() => Updater.DownloadAsync(http, info!, target, null, FakeReleaseHandler.Base), "nesedí");
+        Assert.True(!File.Exists(target + ".download"), "corrupt file deleted");
+        Assert.Equal("old exe", File.ReadAllText(target), "exe untouched");
+    }
+
+    private static async Task ExpectUpdateError(Func<Task> action, string expected)
+    {
+        try
+        {
+            await action();
+        }
+        catch (UpdateException ex)
+        {
+            Assert.True(ex.Message.Contains(expected), $"expected '{expected}' in '{ex.Message}'");
+            return;
+        }
+        throw new Exception($"expected UpdateException containing '{expected}'");
+    }
+
+    private sealed class SyncProgress(Action<int> report) : IProgress<int>
+    {
+        public void Report(int value) => report(value);
+    }
+
+    /// <summary>Serves version.txt and the exe like the GitHub "latest" release.</summary>
+    private sealed class FakeReleaseHandler(string? version, byte[] exe, bool offline = false) : HttpMessageHandler
+    {
+        public static readonly Uri Base = new("https://example.test/releases/download/latest/");
+        public byte[]? ServeExe { get; init; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            if (offline) throw new HttpRequestException("No such host is known.");
+            var name = request.RequestUri!.Segments[^1];
+            if (version == null) return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+            var body = name switch
+            {
+                Updater.ManifestName => System.Text.Encoding.ASCII.GetBytes(
+                    $"{version}\r\n{Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(exe))}"),
+                Updater.ExeName => ServeExe ?? exe,
+                _ => null,
+            };
+            return Task.FromResult(body == null
+                ? new HttpResponseMessage(System.Net.HttpStatusCode.NotFound)
+                : new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new ByteArrayContent(body) });
+        }
     }
 
     private static async Task ExpectObsError(Func<Task> action, string expected)

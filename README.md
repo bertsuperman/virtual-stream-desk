@@ -20,6 +20,8 @@ Kým je bočný panel otvorený, deck sa správa ako bežné okno (dá sa doň p
 
 Keď spustíš novšiu verziu, kým stará beží v lište, nová ju sama ukončí a nahradí. Verziu nájdeš v Nastavenia → Všeobecné.
 
+**Aktualizácie:** Stream Deck sa pri štarte a potom každých 6 hodín pozrie na GitHub. Keď je novšia verzia, v pravom pruhu sa objaví zelená šípka (alebo Nastavenia → Všeobecné → Aktualizovať). Novú verziu stiahne priamo appka, overí jej SHA-256 a nahradí ňou svoje .exe, takže Windows SmartScreen pri spustení nevaruje. Pôvodný súbor sa dočasne premenuje na `VirtualStreamDeck.exe.old` a pri ďalšom štarte sa vymaže. Automatickú kontrolu možno vypnúť v Nastavenia → Všeobecné.
+
 Akcie: **Otvoriť** (program / súbor / priečinok / web), **Klávesová skratka** (pošle sa do aktívneho okna), **Médiá** (play/pauza, ďalšia, predošlá, stop, hlasitosť, mute), **OBS Studio** (viď nižšie).
 
 ## Profily

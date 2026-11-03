@@ -32,10 +32,20 @@ jobs:
           -p:Version=0.2.${{ github.run_number }}
           -o publish
 
+      # Read by the app's self-update: line 1 version, line 2 SHA-256 of the exe.
+      - name: Write version.txt
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash publish/VirtualStreamDeck.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "0.2.${{ github.run_number }}`n$hash" | Set-Content publish/version.txt -NoNewline -Encoding ascii
+          Get-Content publish/version.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: VirtualStreamDeck-win-x64
-          path: publish/VirtualStreamDeck.exe
+          path: |
+            publish/VirtualStreamDeck.exe
+            publish/version.txt
 
       - name: Update "latest" release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -44,8 +54,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag 2>$null
-          gh release create latest publish/VirtualStreamDeck.exe `
+          gh release create latest publish/VirtualStreamDeck.exe publish/version.txt `
             --prerelease `
             --target ${{ github.sha }} `
             --title "Najnovšia verzia 0.2.${{ github.run_number }}" `
-            --notes "Automaticky zostavené z commitu ${{ github.sha }}. Stiahni VirtualStreamDeck.exe a spusti. Ak beží staršia verzia, nová ju sama nahradí."
+            --notes "Automaticky zostavené z commitu ${{ github.sha }}. Stiahni VirtualStreamDeck.exe a spusti. Ak beží staršia verzia, nová ju sama nahradí. Od tejto verzie sa Stream Deck vie aktualizovať aj sám (zelená šípka alebo Nastavenia → Všeobecné)."

@@ -27,6 +27,7 @@ public partial class SettingsPanel : UserControl
     private Deck _deck = null!;
     private ObsClient _obs = null!;
     private RemoteServer _remote = null!;
+    private UpdateService _updates = null!;
     private bool _loading = true;
 
     public SettingsPanel()
@@ -39,11 +40,12 @@ public partial class SettingsPanel : UserControl
 
     public string CurrentSection => (Nav.SelectedItem as ListBoxItem)?.Tag as string ?? Profiles;
 
-    internal void Initialize(Deck deck, ObsClient obs, RemoteServer remote)
+    internal void Initialize(Deck deck, ObsClient obs, RemoteServer remote, UpdateService updates)
     {
         _deck = deck;
         _obs = obs;
         _remote = remote;
+        _updates = updates;
 
         _loading = true;
         var s = deck.Config.Settings;
@@ -52,6 +54,7 @@ public partial class SettingsPanel : UserControl
         TopmostBox.IsChecked = s.AlwaysOnTop;
         LabelsBox.IsChecked = s.ShowLabels;
         AutostartBox.IsChecked = s.StartWithWindows;
+        AutoUpdateBox.IsChecked = s.CheckForUpdates;
         VersionText.Text = $"{AppInfo.ProductName} {AppInfo.Version}\n{deck.Store.Directory}";
         ObsHostBox.Text = s.Obs.Host;
         ObsPortBox.Text = s.Obs.Port.ToString();
@@ -74,6 +77,10 @@ public partial class SettingsPanel : UserControl
             AutoStart.Set(AutostartBox.IsChecked == true);
             Apply();
         };
+
+        AutoUpdateBox.Click += (_, _) => Apply();
+        _updates.Changed += RefreshUpdate;
+        RefreshUpdate();
 
         ProfileNameBox.TextChanged += (_, _) => RenameActiveProfile();
 
@@ -146,6 +153,7 @@ public partial class SettingsPanel : UserControl
             c.Settings.AlwaysOnTop = TopmostBox.IsChecked == true;
             c.Settings.ShowLabels = LabelsBox.IsChecked == true;
             c.Settings.StartWithWindows = AutostartBox.IsChecked == true;
+            c.Settings.CheckForUpdates = AutoUpdateBox.IsChecked == true;
         });
     }
 
@@ -166,6 +174,54 @@ public partial class SettingsPanel : UserControl
         HiddenInfo.Text = hidden == 0
             ? "Tlačidlá presunieš ťahaním myšou. Pravý klik na tlačidlo ho upraví."
             : $"Mimo mriežky je {hidden} tlačidiel. Nevymazali sa – po zväčšení mriežky sa vrátia.";
+    }
+
+    // ───────────────────────── updates ─────────────────────────
+
+    private void RefreshUpdate()
+    {
+        var u = _updates;
+        var info = u.Available;
+        bool busy = u.Current is UpdateService.State.Checking or UpdateService.State.Downloading or UpdateService.State.Restarting;
+        UpdateButton.IsEnabled = !busy;
+        UpdateButton.Content = info != null ? $"Aktualizovať na {info.Version}" : "Skontrolovať teraz";
+
+        UpdateStatus.ClearValue(TextBlock.ForegroundProperty);
+        switch (u.Current)
+        {
+            case UpdateService.State.Checking:
+                UpdateStatus.Text = "Kontrolujem…";
+                break;
+            case UpdateService.State.Downloading:
+                UpdateStatus.Text = $"Sťahujem verziu {info?.Version}… {u.Percent} %";
+                break;
+            case UpdateService.State.Restarting:
+                UpdateStatus.Text = "Spúšťam novú verziu…";
+                break;
+            case UpdateService.State.Error:
+                UpdateStatus.Foreground = ErrorBrush;
+                UpdateStatus.Text = u.Error;
+                break;
+            case UpdateService.State.UpToDate:
+                UpdateStatus.Foreground = OkBrush;
+                UpdateStatus.Text = $"Máš najnovšiu verziu ({AppInfo.Version}).";
+                break;
+            case UpdateService.State.Available when info != null:
+                UpdateStatus.Foreground = OkBrush;
+                UpdateStatus.Text = $"Je dostupná nová verzia {info.Version} (teraz máš {AppInfo.Version}).";
+                break;
+            default:
+                UpdateStatus.Text = UpdateService.IsDevBuild
+                    ? "Vývojová verzia: automaticky sa nekontroluje."
+                    : $"Teraz máš verziu {AppInfo.Version}.";
+                break;
+        }
+    }
+
+    private async void Update_Click(object sender, RoutedEventArgs e)
+    {
+        if (_updates.Available != null) await _updates.ConfirmAndInstallAsync(Owner);
+        else await _updates.CheckAsync();
     }
 
     private void OpenFolder_Click(object sender, RoutedEventArgs e) => ShellHelper.OpenFolder(_deck.Store.Directory);

@@ -78,6 +78,9 @@
                         ToolTip="Nastavenia" Click="SettingsRail_Click" />
                 <Button x:Name="GuideRailButton" Style="{StaticResource RailButton}" Content="&#xE897;"
                         ToolTip="Návod" Click="GuideRail_Click" />
+                <!-- Shown only when a newer version is on GitHub -->
+                <Button x:Name="UpdateRailButton" Style="{StaticResource RailButton}" Content="&#xE896;"
+                        Foreground="#FF5CCB6E" Visibility="Collapsed" Click="UpdateRail_Click" />
             </StackPanel>
         </Border>
 

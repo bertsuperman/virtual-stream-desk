@@ -54,7 +54,9 @@ public partial class App : Application
         // Keep the autostart entry pointing at the current exe location.
         if (deck.Config.Settings.StartWithWindows) AutoStart.Set(true);
 
-        var main = new MainWindow(deck, obs, remote);
+        var updates = new UpdateService(deck);
+
+        var main = new MainWindow(deck, obs, remote, updates);
         _main = main;
         main.Show();
         remote.ButtonPressed += id => Dispatcher.InvokeAsync(() => main.FlashButton(id));
@@ -64,6 +66,8 @@ public partial class App : Application
             toggleWindow: main.ToggleVisibility,
             openSettings: () => main.OpenSettings(),
             exit: ExitApp);
+
+        updates.Start();
 
         if (store.LastLoadWarning is { } warning)
             MessageBox.Show(warning, AppInfo.ProductName, MessageBoxButton.OK, MessageBoxImage.Warning);

@@ -217,6 +217,8 @@ public sealed class DeckSettings
     public bool AlwaysOnTop { get; set; } = true;
     public bool ShowLabels { get; set; } = true;
     public bool StartWithWindows { get; set; }
+    /// <summary>Look for a newer build on GitHub at startup and every few hours.</summary>
+    public bool CheckForUpdates { get; set; } = true;
     public WindowPosition? Window { get; set; }
     public ObsSettings Obs { get; set; } = new();
     public RemoteSettings Remote { get; set; } = new();

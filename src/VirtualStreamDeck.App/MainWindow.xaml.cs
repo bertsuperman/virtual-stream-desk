@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     private readonly Deck _deck;
     private readonly ObsClient _obs;
     private readonly RemoteServer _remote;
+    private readonly UpdateService _updates;
     private readonly IconService _icons;
     private readonly Dictionary<string, Border> _tiles = new();
     private HotkeyService? _hotkeys;
@@ -48,12 +49,13 @@ public partial class MainWindow : Window
     private int _statusVersion;
     private readonly System.Windows.Threading.DispatcherTimer _savePositionTimer;
 
-    internal MainWindow(Deck deck, ObsClient obs, RemoteServer remote)
+    internal MainWindow(Deck deck, ObsClient obs, RemoteServer remote, UpdateService updates)
     {
         InitializeComponent();
         _deck = deck;
         _obs = obs;
         _remote = remote;
+        _updates = updates;
         _icons = new IconService(deck.Store);
 
         var pos = deck.Config.Settings.Window;
@@ -89,10 +91,52 @@ public partial class MainWindow : Window
             _savePositionTimer.Start();
         };
 
-        SidePanel.Initialize(deck, obs, remote);
+        SidePanel.Initialize(deck, obs, remote, updates);
         SidePanel.CollapseRequested += () => SetPanel(null);
+        updates.Changed += OnUpdateChanged;
         Rebuild();
     }
+
+    // ───────────────────────── updates ─────────────────────────
+
+    private string? _announcedVersion;
+    private int _lastToastPercent = -1;
+
+    private void OnUpdateChanged()
+    {
+        var u = _updates;
+        var info = u.Available;
+        bool busy = u.Current is UpdateService.State.Downloading or UpdateService.State.Restarting;
+        UpdateRailButton.Visibility = info != null ? Visibility.Visible : Visibility.Collapsed;
+        UpdateRailButton.IsEnabled = !busy;
+        UpdateRailButton.ToolTip = u.Current switch
+        {
+            UpdateService.State.Downloading => $"Sťahujem verziu {info?.Version}… {u.Percent} %",
+            UpdateService.State.Restarting => "Spúšťam novú verziu…",
+            _ => $"Nová verzia {info?.Version} – klikni a aktualizuj",
+        };
+
+        switch (u.Current)
+        {
+            case UpdateService.State.Available when info != null && info.Version != _announcedVersion:
+                _announcedVersion = info.Version;
+                ShowStatus($"Je dostupná nová verzia {info.Version}. Aktualizuješ ju zelenou šípkou vpravo.", isError: false);
+                break;
+            case UpdateService.State.Downloading when u.Percent / 10 != _lastToastPercent:
+                _lastToastPercent = u.Percent / 10; // a toast every 10 %, not on every chunk
+                ShowStatus($"Sťahujem verziu {info?.Version}… {u.Percent} %", isError: false);
+                break;
+            case UpdateService.State.Restarting:
+                ShowStatus("Spúšťam novú verziu…", isError: false);
+                break;
+            case UpdateService.State.Error when u.Error != null && SidePanel.Visibility != Visibility.Visible:
+                ShowStatus(u.Error, isError: true);
+                break;
+        }
+        if (u.Current != UpdateService.State.Downloading) _lastToastPercent = -1;
+    }
+
+    private async void UpdateRail_Click(object sender, RoutedEventArgs e) => await _updates.ConfirmAndInstallAsync(this);
 
     // ───────────────────────── window setup ─────────────────────────
 
