@@ -21,7 +21,7 @@ Treba [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). Potom v 
 ./build.ps1
 ```
 
-Výsledok je `publish\VirtualStreamDeck.exe`: jeden súbor, netreba nič inštalovať. Pri každom pushnutí ho zostaví aj GitHub Actions (`.github/workflows/build.yml`, artefakt *VirtualStreamDeck-win-x64*).
+Výsledok je `publish\VirtualStreamDeck.exe`: jeden súbor, netreba nič inštalovať. Pri každom pushnutí ho zostaví aj GitHub Actions (`.github/workflows/build.yml`). Push do `main` navyše aktualizuje release **latest**, odkiaľ sa dá .exe priamo stiahnuť.
 
 Na vývoj stačí otvoriť `VirtualStreamDeck.sln` vo Visual Studiu alebo Rideri.
 
