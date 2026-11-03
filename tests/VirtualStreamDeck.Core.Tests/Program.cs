@@ -671,19 +671,19 @@ static class Tests
     {
         try
         {
-            L.Set(Language.En);
+            L.Set(AppLanguage.En);
             Assert.Equal("Main", DeckConfig.DefaultProfileName, "english default profile");
             Assert.Equal("The button does not exist.", L.T("Tlačidlo neexistuje.", "The button does not exist."));
-            L.Set(Language.Sk);
+            L.Set(AppLanguage.Sk);
             Assert.Equal("Hlavný", DeckConfig.DefaultProfileName, "slovak default profile");
-            Assert.Equal(Language.En, L.Parse(" EN "), "parse en");
-            Assert.Equal(Language.Sk, L.Parse("sk"), "parse sk");
+            Assert.Equal(AppLanguage.En, L.Parse(" EN "), "parse en");
+            Assert.Equal(AppLanguage.Sk, L.Parse("sk"), "parse sk");
             Assert.True(L.Parse(null) == null && L.Parse("de") == null, "unknown codes");
-            Assert.Equal("en", L.Code(Language.En));
+            Assert.Equal("en", L.Code(AppLanguage.En));
         }
         finally
         {
-            L.Set(Language.Sk);
+            L.Set(AppLanguage.Sk);
         }
     }
 
@@ -694,13 +694,13 @@ static class Tests
         deck.Load();
         try
         {
-            L.Set(Language.En);
+            L.Set(AppLanguage.En);
             var result = await deck.PressAsync("missing");
             Assert.Equal("The button does not exist.", result.Error, "english error");
         }
         finally
         {
-            L.Set(Language.Sk);
+            L.Set(AppLanguage.Sk);
         }
     }
 

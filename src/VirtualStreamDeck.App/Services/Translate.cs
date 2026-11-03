@@ -38,7 +38,7 @@ public sealed class TExtension : MarkupExtension
     private sealed class Pick(string sk, string en) : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-            value is Language.En ? en : sk;
+            value is AppLanguage.En ? en : sk;
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
             throw new NotSupportedException();
@@ -55,7 +55,7 @@ public sealed class LanguageSource : INotifyPropertyChanged
         L.Changed += () => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Language)));
     }
 
-    public Language Language => L.Current;
+    public AppLanguage Language => L.Current;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 }

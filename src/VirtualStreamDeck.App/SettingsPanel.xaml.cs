@@ -40,8 +40,8 @@ public partial class SettingsPanel : UserControl
 
     private void ShowGuideLanguage()
     {
-        GuideSk.Visibility = L.Current == Language.Sk ? Visibility.Visible : Visibility.Collapsed;
-        GuideEn.Visibility = L.Current == Language.En ? Visibility.Visible : Visibility.Collapsed;
+        GuideSk.Visibility = L.Current == AppLanguage.Sk ? Visibility.Visible : Visibility.Collapsed;
+        GuideEn.Visibility = L.Current == AppLanguage.En ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public string CurrentSection => (Nav.SelectedItem as ListBoxItem)?.Tag as string ?? Profiles;
@@ -61,7 +61,7 @@ public partial class SettingsPanel : UserControl
         LabelsBox.IsChecked = s.ShowLabels;
         AutostartBox.IsChecked = s.StartWithWindows;
         AutoUpdateBox.IsChecked = s.CheckForUpdates;
-        LanguageBox.SelectedIndex = L.Current == Language.En ? 1 : 0;
+        LanguageBox.SelectedIndex = L.Current == AppLanguage.En ? 1 : 0;
         ShowGuideLanguage();
         VersionText.Text = $"{AppInfo.ProductName} {AppInfo.Version}\n{deck.Store.Directory}";
         ObsHostBox.Text = s.Obs.Host;
@@ -90,7 +90,7 @@ public partial class SettingsPanel : UserControl
         LanguageBox.SelectionChanged += (_, _) =>
         {
             if (_loading || (LanguageBox.SelectedItem as ComboBoxItem)?.Tag is not string code) return;
-            var language = L.Parse(code) ?? Language.Sk;
+            var language = L.Parse(code) ?? AppLanguage.Sk;
             L.Set(language); // every window re-reads its texts
             _deck.Update(c => c.Settings.Language = L.Code(language)); // phones get the new language too
         };
@@ -99,7 +99,7 @@ public partial class SettingsPanel : UserControl
             ShowGuideLanguage();
             bool wasLoading = _loading;
             _loading = true;
-            LanguageBox.SelectedIndex = L.Current == Language.En ? 1 : 0;
+            LanguageBox.SelectedIndex = L.Current == AppLanguage.En ? 1 : 0;
             _loading = wasLoading;
             RefreshFromDeck();
             RefreshUpdate();

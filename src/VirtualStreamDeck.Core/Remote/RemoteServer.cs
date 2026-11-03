@@ -289,7 +289,7 @@ public sealed partial class RemoteServer : IDisposable
     private static readonly ConcurrentDictionary<string, byte[]> AssetCache = new();
 
     /// <summary>The page in the PC's language, so the "connecting…" screen is right before the first message.</summary>
-    private static byte[] IndexHtml() => L.Current == Language.Sk
+    private static byte[] IndexHtml() => L.Current == AppLanguage.Sk
         ? Asset("index.html")
         : AssetCache.GetOrAdd("index.html#en", _ =>
             System.Text.Encoding.UTF8.GetBytes(System.Text.Encoding.UTF8.GetString(Asset("index.html"))

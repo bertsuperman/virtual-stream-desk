@@ -9,7 +9,7 @@ namespace VirtualStreamDeck.App;
 /// <summary>First start: "Slovenčina or English?" Closing the window keeps the Windows language.</summary>
 internal sealed class LanguageWindow : Window
 {
-    private Language _choice = L.FromSystem();
+    private AppLanguage _choice = L.FromSystem();
 
     private LanguageWindow()
     {
@@ -41,13 +41,13 @@ internal sealed class LanguageWindow : Window
         });
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-        buttons.Children.Add(Choice("Slovenčina", Language.Sk, new Thickness(0, 0, 12, 0)));
-        buttons.Children.Add(Choice("English", Language.En, new Thickness(0)));
+        buttons.Children.Add(Choice("Slovenčina", AppLanguage.Sk, new Thickness(0, 0, 12, 0)));
+        buttons.Children.Add(Choice("English", AppLanguage.En, new Thickness(0)));
         panel.Children.Add(buttons);
         Content = panel;
     }
 
-    private Button Choice(string text, Language language, Thickness margin)
+    private Button Choice(string text, AppLanguage language, Thickness margin)
     {
         var button = new Button
         {
@@ -66,7 +66,7 @@ internal sealed class LanguageWindow : Window
         return button;
     }
 
-    public static Language Ask()
+    public static AppLanguage Ask()
     {
         var window = new LanguageWindow();
         window.ShowDialog();
