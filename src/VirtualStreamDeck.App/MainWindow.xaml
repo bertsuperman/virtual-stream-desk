@@ -39,6 +39,29 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="ProfileButton" TargetType="Button">
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Foreground" Value="#FF9A9AA4" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Padding="6,0">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#FF2C2C33" />
+                                <Setter Property="Foreground" Value="#FFEDEDF2" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <DockPanel>
@@ -51,19 +74,27 @@
               MouseLeftButtonDown="Header_MouseLeftButtonDown"
               MouseMove="Header_MouseMove"
               MouseLeftButtonUp="Header_MouseLeftButtonUp">
-            <TextBlock x:Name="HeaderText"
-                       Text="STREAM DECK"
-                       Margin="10,0,90,0"
-                       VerticalAlignment="Center"
-                       FontSize="10"
-                       FontWeight="SemiBold"
-                       Foreground="#FF5F5F68"
-                       TextTrimming="CharacterEllipsis" />
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,4,0">
-                <Button Style="{StaticResource HeaderButton}" Content="&#xE713;" ToolTip="Nastavenia" Click="Settings_Click" />
-                <Button Style="{StaticResource HeaderButton}" Content="&#xE921;" ToolTip="Minimalizovať na panel úloh" Click="Minimize_Click" />
-                <Button Style="{StaticResource HeaderButton}" Content="&#xE8BB;" ToolTip="Zavrieť do lišty – appka beží ďalej (ukončíš ju cez ikonu v lište)" Click="Hide_Click" />
-            </StackPanel>
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="0,0,4,0">
+                    <Button Style="{StaticResource HeaderButton}" Content="&#xE713;" ToolTip="Nastavenia" Click="Settings_Click" />
+                    <Button Style="{StaticResource HeaderButton}" Content="&#xE921;" ToolTip="Minimalizovať na panel úloh" Click="Minimize_Click" />
+                    <Button Style="{StaticResource HeaderButton}" Content="&#xE8BB;" ToolTip="Ukončiť Stream Deck" Click="Close_Click" />
+                </StackPanel>
+                <Button x:Name="ProfileButton" DockPanel.Dock="Left" Style="{StaticResource ProfileButton}"
+                        Margin="4,0,0,0" ToolTip="Prepnúť profil" Click="ProfileButton_Click">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="ProfileNameText" Text="Hlavný" MaxWidth="140" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="&#xE70D;" FontFamily="{StaticResource IconFont}" FontSize="8" Margin="5,1,0,0"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <TextBlock x:Name="HeaderText"
+                           Margin="6,0,6,0"
+                           VerticalAlignment="Center"
+                           FontSize="10"
+                           FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis" />
+            </DockPanel>
         </Grid>
 
         <UniformGrid x:Name="DeckGrid" Margin="6,0,6,6" />

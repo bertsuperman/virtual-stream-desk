@@ -20,6 +20,7 @@ public sealed class Deck
 {
     private readonly ConfigStore _store;
     private readonly IActionExecutor _executor;
+    private readonly object _gate = new();
 
     public Deck(ConfigStore store, IActionExecutor executor)
     {
@@ -30,8 +31,14 @@ public sealed class Deck
     public DeckConfig Config { get; private set; } = new();
     public ConfigStore Store => _store;
 
-    /// <summary>Raised after a change that affects the layout or hotkeys.</summary>
+    /// <summary>Raised after a change that affects the layout or hotkeys (on the thread that called Update).</summary>
     public event EventHandler? Changed;
+
+    /// <summary>Runs <paramref name="read"/> while no update can happen. For readers on other threads (web server).</summary>
+    public T Read<T>(Func<DeckConfig, T> read)
+    {
+        lock (_gate) return read(Config);
+    }
 
     public void Load()
     {
@@ -43,21 +50,43 @@ public sealed class Deck
     /// <summary>Applies a change, saves it and (unless <paramref name="notify"/> is false) raises <see cref="Changed"/>.</summary>
     public void Update(Action<DeckConfig> mutate, bool notify = true)
     {
-        mutate(Config);
-        Config.Settings.Normalize();
-        _store.Save(Config);
+        lock (_gate)
+        {
+            mutate(Config);
+            Config.Normalize();
+            _store.Save(Config);
+        }
         if (notify) Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Makes another profile active. Raises <see cref="Changed"/> on the calling thread.</summary>
+    public bool SwitchProfile(string profileId)
+    {
+        if (Read(c => c.FindProfile(profileId)) == null) return false;
+        if (Read(c => c.ActiveProfileId) == profileId) return true;
+        Update(c => c.ActiveProfileId = profileId);
+        return true;
     }
 
     public Task<PressResult> PressAsync(string buttonId)
     {
-        var button = Config.FindById(buttonId);
-        if (button == null || !Config.IsVisible(button))
-            return Task.FromResult(PressResult.Fail("Tlačidlo neexistuje."));
-        if (button.Action == null)
+        DeckAction? action;
+        lock (_gate)
+        {
+            var button = Config.FindById(buttonId);
+            if (button == null || !Config.IsVisible(button))
+                return Task.FromResult(PressResult.Fail("Tlačidlo neexistuje."));
+            action = button.Action;
+        }
+        if (action == null)
             return Task.FromResult(PressResult.Ok);
 
-        var action = button.Action;
+        if (action is ProfileAction profile)
+        {
+            return Task.FromResult(SwitchProfile(profile.ProfileId)
+                ? PressResult.Ok
+                : PressResult.Fail("Tento profil už neexistuje. Uprav tlačidlo."));
+        }
         // Actions may wait for the user to release modifier keys, so never run them on the UI thread.
         return Task.Run(async () =>
         {

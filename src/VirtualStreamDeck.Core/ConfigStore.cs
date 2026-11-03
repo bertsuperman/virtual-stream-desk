@@ -49,15 +49,18 @@ public sealed class ConfigStore
     public DeckConfig Load()
     {
         LastLoadWarning = null;
-        if (!File.Exists(ConfigPath)) return new DeckConfig();
+        if (!File.Exists(ConfigPath))
+        {
+            var fresh = new DeckConfig();
+            fresh.Normalize();
+            return fresh;
+        }
 
         try
         {
             var json = File.ReadAllText(ConfigPath);
             var config = JsonSerializer.Deserialize<DeckConfig>(json, JsonOptions) ?? new DeckConfig();
-            config.Settings ??= new DeckSettings();
-            config.Buttons ??= new List<DeckButton>();
-            config.Settings.Normalize();
+            config.Normalize(); // also migrates v1/v2 (buttons at the top level) into the first profile
             return config;
         }
         catch (Exception ex) when (ex is JsonException or NotSupportedException or IOException)
@@ -66,7 +69,9 @@ public sealed class ConfigStore
             try { File.Copy(ConfigPath, backup, overwrite: true); } catch { /* best effort */ }
             LastLoadWarning =
                 $"Konfiguráciu sa nepodarilo načítať ({ex.Message}).\nPôvodný súbor je zálohovaný ako {Path.GetFileName(backup)}.";
-            return new DeckConfig();
+            var fresh = new DeckConfig();
+            fresh.Normalize();
+            return fresh;
         }
     }
 
@@ -81,8 +86,16 @@ public sealed class ConfigStore
 
     public static string Serialize(DeckConfig config) => JsonSerializer.Serialize(config, JsonOptions);
 
-    public static DeckConfig Deserialize(string json) =>
-        JsonSerializer.Deserialize<DeckConfig>(json, JsonOptions) ?? new DeckConfig();
+    public static DeckConfig Deserialize(string json)
+    {
+        var config = JsonSerializer.Deserialize<DeckConfig>(json, JsonOptions) ?? new DeckConfig();
+        config.Normalize();
+        return config;
+    }
+
+    public static string Serialize<T>(T value) => JsonSerializer.Serialize(value, JsonOptions);
+
+    public static T Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, JsonOptions)!;
 
     public string? ResolveIconPath(string? relative)
     {
@@ -100,7 +113,7 @@ public sealed class ConfigStore
         if (!System.IO.Directory.Exists(IconsDirectory)) return 0;
 
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var b in config.Buttons)
+        foreach (var b in config.AllButtons)
         {
             if (string.IsNullOrWhiteSpace(b.Icon)) continue;
             used.Add(Path.GetFullPath(Path.Combine(Directory, b.Icon)));

@@ -109,6 +109,9 @@ static class Tests
         }
         """;
         var c = ConfigStore.Deserialize(json);
+        Assert.Equal(1, c.Profiles.Count, "v1 config migrated into one profile");
+        Assert.Equal("Hlavný", c.ActiveProfile.Name, "profile name");
+        Assert.Equal((3, 5), (c.Rows, c.Columns), "rows/columns moved into the profile");
         Assert.Equal(3, c.Buttons.Count, "buttons");
         Assert.Equal(100.0, c.Settings.Window!.X, "window.x");
         Assert.True(c.Buttons[0].Action is OpenAction { Target: @"C:\Users\x\Discord.lnk" }, "open action");
@@ -126,7 +129,8 @@ static class Tests
         Assert.True(json.Contains("\"type\": \"media\""), "type discriminator");
         Assert.True(json.Contains("\"command\": \"volumeUp\""), "enum as camelCase string");
         Assert.True(json.Contains("Spotify – hudba"), "non-ASCII not escaped");
-        Assert.True(!json.Contains("isUrl") && !json.Contains("virtualKey"), "computed properties not serialized");
+        Assert.True(!json.Contains("isUrl") && !json.Contains("virtualKey") && !json.Contains("visibleButtons") &&
+                    !json.Contains("activeProfile\"") && !json.Contains("allButtons"), "computed properties not serialized");
 
         var back = ConfigStore.Deserialize(json);
         Assert.Equal(ConfigStore.Serialize(back), json, "round trip");
@@ -146,10 +150,10 @@ static class Tests
     {
         var c = new DeckConfig();
         c.Buttons.Add(new DeckButton { Id = "far", Row = 2, Col = 4 });
-        c.Settings.Rows = 2;
+        c.Rows = 2;
         Assert.Equal(1, c.Buttons.Count, "still stored");
         Assert.True(!c.IsVisible(c.Buttons[0]), "hidden");
-        c.Settings.Rows = 3;
+        c.Rows = 3;
         Assert.True(c.IsVisible(c.Buttons[0]), "visible again");
     }
 
@@ -177,7 +181,9 @@ static class Tests
 
     public static void Grid_FindEmptyCellWrapsAndFillsUp()
     {
-        var c = new DeckConfig { Settings = { Rows = 2, Columns = 2 } };
+        var c = new DeckConfig();
+        c.Rows = 2;
+        c.Columns = 2;
         Assert.Equal((0, 0), c.FindEmptyCell()!.Value, "first");
         c.Buttons.Add(new DeckButton { Row = 1, Col = 1 });
         Assert.Equal((0, 0), c.FindEmptyCell(1, 1)!.Value, "wraps around");
@@ -199,9 +205,11 @@ static class Tests
 
     public static void Settings_AreClamped()
     {
-        var s = new DeckSettings { Rows = 0, Columns = 99, ButtonSize = 5, Spacing = -3 };
-        s.Normalize();
-        Assert.Equal((1, 12, 40, 0), (s.Rows, s.Columns, s.ButtonSize, s.Spacing));
+        var c = new DeckConfig { Settings = { ButtonSize = 5, Spacing = -3 } };
+        c.Rows = 0;
+        c.Columns = 99;
+        c.Normalize();
+        Assert.Equal((1, 12, 40, 0), (c.Rows, c.Columns, c.Settings.ButtonSize, c.Settings.Spacing));
     }
 
     // ───────── ConfigStore (file system) ─────────
@@ -304,6 +312,240 @@ static class Tests
         // SendInput fails unless cbSize matches the native INPUT struct exactly.
         int expected = IntPtr.Size == 8 ? 40 : 28;
         Assert.Equal(expected, VirtualStreamDeck.Core.Windows.NativeInput.InputStructSize, "sizeof(INPUT)");
+    }
+
+    // ───────── Profiles ─────────
+
+    public static void Profiles_MigratedConfigIsWrittenInNewFormat()
+    {
+        var c = ConfigStore.Deserialize("""{ "version": 2, "settings": { "rows": 2, "columns": 4 }, "buttons": [ { "id": "a", "label": "X" } ] }""");
+        var json = ConfigStore.Serialize(c);
+        Assert.True(json.Contains("\"profiles\"") && json.Contains("\"activeProfileId\""), "profiles written");
+        Assert.True(!json.Contains("\"rows\": 2,\n    \"columns\"") , "no legacy rows in settings");
+        var back = ConfigStore.Deserialize(json);
+        Assert.Equal((2, 4, "X"), (back.Rows, back.Columns, back.Buttons[0].Label), "round trip");
+        Assert.Equal(DeckConfig.CurrentVersion, back.Version, "version bumped");
+        Assert.True(!json.Contains("\"buttons\": [\n    {\n      \"id\": \"a\"") || json.IndexOf("\"buttons\"") > json.IndexOf("\"profiles\""), "buttons only inside profiles");
+    }
+
+    public static void Profiles_AddDuplicateRemoveSwitch()
+    {
+        var c = new DeckConfig();
+        c.Normalize();
+        c.Buttons.Add(new DeckButton { Id = "a", Label = "A", Icon = "icons/a.png", Hotkey = "F13" });
+        var main = c.ActiveProfile;
+
+        var dup = c.DuplicateProfile(main.Id, c.UniqueProfileName(main.Name));
+        Assert.Equal("Hlavný 2", dup.Name, "unique name");
+        Assert.Equal(1, dup.Buttons.Count, "buttons copied");
+        Assert.True(dup.Buttons[0].Id != "a" && dup.Buttons[0].Label == "A", "new ids, same content");
+        dup.Buttons[0].Label = "changed";
+        Assert.Equal("A", main.Buttons[0].Label, "deep copy");
+
+        var empty = c.AddProfile("Hry");
+        Assert.Equal(0, empty.Buttons.Count, "new profile is empty");
+        c.ActiveProfileId = empty.Id;
+        Assert.Equal(0, c.Buttons.Count, "Buttons follows the active profile");
+        Assert.True(c.FindHotkeyConflict(Hotkey.Parse("F13"), null) == null, "hotkeys are per profile");
+        Assert.Equal(2, c.AllButtons.Count(), "all buttons across profiles");
+
+        Assert.True(c.RemoveProfile(empty.Id), "removed");
+        Assert.Equal(main.Id, c.ActiveProfile.Id, "active falls back to the first profile");
+        Assert.True(c.RemoveProfile(dup.Id), "removed dup");
+        Assert.True(!c.RemoveProfile(main.Id), "last profile stays");
+    }
+
+    public static async Task Profiles_ProfileActionSwitches()
+    {
+        using var dir = new TempDir();
+        var deck = new Deck(new ConfigStore(dir.Path), new FakeExecutor());
+        deck.Load();
+        string gamesId = "";
+        deck.Update(c =>
+        {
+            var games = c.AddProfile("Hry");
+            gamesId = games.Id;
+            c.Buttons.Add(new DeckButton { Id = "go", Action = new ProfileAction { ProfileId = games.Id } });
+            c.Buttons.Add(new DeckButton { Id = "dead", Col = 1, Action = new ProfileAction { ProfileId = "missing" } });
+        });
+        int changes = 0;
+        deck.Changed += (_, _) => changes++;
+
+        Assert.True(!(await deck.PressAsync("dead")).Success, "missing profile reported");
+        Assert.True((await deck.PressAsync("go")).Success, "switch ok");
+        Assert.Equal(gamesId, deck.Config.ActiveProfile.Id, "switched");
+        Assert.Equal(1, changes, "Changed raised");
+        Assert.True(deck.SwitchProfile(gamesId) && changes == 1, "switching to the active profile is a no-op");
+
+        var reloaded = new ConfigStore(dir.Path).Load();
+        Assert.Equal(gamesId, reloaded.ActiveProfileId, "active profile persisted");
+    }
+
+    public static void Store_CleanupKeepsIconsOfOtherProfiles()
+    {
+        using var dir = new TempDir();
+        var store = new ConfigStore(dir.Path);
+        Directory.CreateDirectory(store.IconsDirectory);
+        File.WriteAllText(Path.Combine(store.IconsDirectory, "other.png"), "");
+        var c = new DeckConfig();
+        c.Normalize();
+        c.AddProfile("B").Buttons.Add(new DeckButton { Icon = "icons/other.png" });
+        Assert.Equal(0, store.CleanupIcons(c), "icon of an inactive profile kept");
+    }
+
+    // ───────── QR + remote ─────────
+
+    public static void Qr_PicksVersionBySize()
+    {
+        Assert.Equal(1, VirtualStreamDeck.Core.Remote.QrCode.Encode("hello").Version, "short");
+        var url = VirtualStreamDeck.Core.Remote.RemoteServer.BuildUrl("192.168.100.200", 8765, RemoteSettings.NewToken());
+        var qr = VirtualStreamDeck.Core.Remote.QrCode.Encode(url);
+        Assert.True(qr.Version <= 4 && qr.Size == qr.Version * 4 + 17, $"typical URL fits v4 (got v{qr.Version})");
+        Assert.True(qr[0, 0] && qr[6, 6] && !qr[7, 7], "finder pattern in the corner");
+        Assert.Equal(22, RemoteSettings.NewToken().Length, "token length");
+    }
+
+    public static async Task Remote_ServesAppAndRequiresToken()
+    {
+        using var env = await RemoteEnv.StartAsync();
+        var http = env.Http;
+        var html = await http.GetStringAsync("/");
+        Assert.True(html.Contains("<title>Stream Deck</title>"), "app served without token");
+        Assert.Equal(200, (int)(await http.GetAsync("/app.png")).StatusCode, "app icon");
+        Assert.Equal(200, (int)(await http.GetAsync("/manifest.webmanifest")).StatusCode, "manifest");
+        Assert.Equal(401, (int)(await http.GetAsync("/api/ping")).StatusCode, "no token");
+        Assert.Equal(401, (int)(await http.GetAsync("/api/ping?t=wrong")).StatusCode, "wrong token");
+        Assert.Equal(200, (int)(await http.GetAsync("/api/ping?t=" + env.Token)).StatusCode, "token ok");
+        Assert.Equal(404, (int)(await http.GetAsync("/nope")).StatusCode, "404");
+
+        File.WriteAllBytes(Path.Combine(env.Store.IconsDirectory, "abc.png"), new byte[] { 1, 2, 3 });
+        Assert.Equal(401, (int)(await http.GetAsync("/icons/abc.png")).StatusCode, "icon needs token");
+        Assert.Equal(3, (await http.GetByteArrayAsync("/icons/abc.png?t=" + env.Token)).Length, "icon served");
+        Assert.Equal(404, (int)(await http.GetAsync("/icons/..%2Fconfig.json?t=" + env.Token)).StatusCode, "no path traversal");
+        Assert.Equal(404, (int)(await http.GetAsync("/icons/../config.json?t=" + env.Token)).StatusCode, "no path traversal 2");
+    }
+
+    public static async Task Remote_WebSocketPressAndLiveUpdates()
+    {
+        using var env = await RemoteEnv.StartAsync();
+        string? pressedOnDesktop = null;
+        env.Server.ButtonPressed += id => pressedOnDesktop = id;
+
+        using var ws = new System.Net.WebSockets.ClientWebSocket();
+        await ws.ConnectAsync(new Uri($"ws://127.0.0.1:{env.Server.Port}/ws?t={env.Token}"), CancellationToken.None);
+        var deckMsg = await RemoteEnv.ReceiveAsync(ws);
+        Assert.Equal("deck", deckMsg["type"]!.GetValue<string>(), "deck on connect");
+        Assert.Equal(2, deckMsg["buttons"]!.AsArray().Count, "hidden button not sent");
+        Assert.Equal("🔊", deckMsg["buttons"]![0]!["emoji"]!.GetValue<string>(), "emoji for media");
+        Assert.Equal(1, env.Server.ClientCount, "client counted");
+
+        await RemoteEnv.SendAsync(ws, """{"type":"press","id":"vol","seq":7}""");
+        var result = await RemoteEnv.ReceiveAsync(ws);
+        Assert.True(result["type"]!.GetValue<string>() == "result" && result["ok"]!.GetValue<bool>() && result["seq"]!.GetValue<int>() == 7, "press ok");
+        Assert.Equal(1, env.Executor.Count, "executed on the PC");
+        Assert.Equal("vol", pressedOnDesktop, "desktop notified");
+
+        await RemoteEnv.SendAsync(ws, """{"type":"press","id":"bad","seq":8}""");
+        var bad = await RemoteEnv.ReceiveAsync(ws);
+        Assert.True(!bad["ok"]!.GetValue<bool>() && bad["error"]!.GetValue<string>() == "boom", "error forwarded");
+
+        // A change on the PC is pushed to the phone.
+        env.Deck.Update(c => c.Buttons.Add(new DeckButton { Id = "new", Col = 2, Label = "Nové" }));
+        var updated = await RemoteEnv.ReceiveAsync(ws);
+        Assert.Equal(3, updated["buttons"]!.AsArray().Count, "live update");
+
+        // Switching profile from the phone.
+        string other = env.Deck.Read(c => c.AddProfile("Druhý").Id);
+        await RemoteEnv.SendAsync(ws, $$"""{"type":"profile","id":"{{other}}"}""");
+        var switched = await RemoteEnv.ReceiveAsync(ws);
+        Assert.Equal(other, switched["activeProfile"]!.GetValue<string>(), "profile switched");
+        Assert.Equal(2, switched["profiles"]!.AsArray().Count, "profiles listed");
+
+        // New QR code: old phones are kicked out.
+        env.Server.SetToken(RemoteSettings.NewToken());
+        for (int i = 0; i < 50 && env.Server.ClientCount > 0; i++) await Task.Delay(20);
+        Assert.Equal(0, env.Server.ClientCount, "disconnected after token change");
+        Assert.Equal(401, (int)(await env.Http.GetAsync("/api/ping?t=" + env.Token)).StatusCode, "old token rejected");
+    }
+
+    public static async Task Remote_RejectsWebSocketWithoutToken()
+    {
+        using var env = await RemoteEnv.StartAsync();
+        using var ws = new System.Net.WebSockets.ClientWebSocket();
+        try
+        {
+            await ws.ConnectAsync(new Uri($"ws://127.0.0.1:{env.Server.Port}/ws?t=nope"), CancellationToken.None);
+            throw new Exception("should not connect");
+        }
+        catch (System.Net.WebSockets.WebSocketException) { }
+        Assert.Equal(0, env.Server.ClientCount, "no client");
+    }
+
+    public static void Remote_PortInUseIsReported()
+    {
+        var blocker = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Any, 0);
+        blocker.Start();
+        int port = ((System.Net.IPEndPoint)blocker.LocalEndpoint).Port;
+        try
+        {
+            using var dir = new TempDir();
+            var deck = new Deck(new ConfigStore(dir.Path), new FakeExecutor());
+            deck.Load();
+            using var server = new VirtualStreamDeck.Core.Remote.RemoteServer(deck);
+            try { server.Start(port, "x"); throw new Exception("should fail"); }
+            catch (VirtualStreamDeck.Core.Remote.RemoteException ex) { Assert.True(ex.Message.Contains("iná aplikácia"), ex.Message); }
+        }
+        finally { blocker.Stop(); }
+    }
+
+    private sealed class RemoteEnv : IDisposable
+    {
+        public required TempDir Dir { get; init; }
+        public required ConfigStore Store { get; init; }
+        public required Deck Deck { get; init; }
+        public required FakeExecutor Executor { get; init; }
+        public required VirtualStreamDeck.Core.Remote.RemoteServer Server { get; init; }
+        public required HttpClient Http { get; init; }
+        public required string Token { get; init; }
+
+        public static Task<RemoteEnv> StartAsync()
+        {
+            var dir = new TempDir();
+            var store = new ConfigStore(dir.Path);
+            Directory.CreateDirectory(store.IconsDirectory);
+            var exec = new FakeExecutor();
+            var deck = new Deck(store, exec);
+            deck.Load();
+            deck.Update(c =>
+            {
+                c.Buttons.Add(new DeckButton { Id = "vol", Label = "Hlasitosť", Action = new MediaAction { Command = MediaCommand.VolumeUp } });
+                c.Buttons.Add(new DeckButton { Id = "bad", Col = 1, Action = new KeysAction { Keys = "boom" } });
+                c.Buttons.Add(new DeckButton { Id = "hidden", Row = 9, Action = new MediaAction() });
+            });
+            var server = new VirtualStreamDeck.Core.Remote.RemoteServer(deck);
+            var token = RemoteSettings.NewToken();
+            server.Start(0, token);
+            var http = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{server.Port}") };
+            return Task.FromResult(new RemoteEnv { Dir = dir, Store = store, Deck = deck, Executor = exec, Server = server, Http = http, Token = token });
+        }
+
+        public static async Task<JsonNode> ReceiveAsync(System.Net.WebSockets.ClientWebSocket ws)
+        {
+            var buffer = new byte[64 * 1024];
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var r = await ws.ReceiveAsync(buffer, cts.Token);
+            return JsonNode.Parse(buffer.AsSpan(0, r.Count))!;
+        }
+
+        public static Task SendAsync(System.Net.WebSockets.ClientWebSocket ws, string json) =>
+            ws.SendAsync(System.Text.Encoding.UTF8.GetBytes(json), System.Net.WebSockets.WebSocketMessageType.Text, true, CancellationToken.None);
+
+        public void Dispose()
+        {
+            Http.Dispose();
+            Server.Dispose();
+            Dir.Dispose();
+        }
     }
 
     // ───────── OBS ─────────

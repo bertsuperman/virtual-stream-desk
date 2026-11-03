@@ -55,6 +55,8 @@ public partial class ButtonEditorWindow : Window
         foreach (var cmd in ObsCommands)
             ObsCommandBox.Items.Add(new ComboBoxItem { Content = MainWindow.ObsName(cmd), Tag = cmd });
         ObsCommandBox.SelectedIndex = 0;
+        ProfileBox.ItemsSource = config.Profiles;
+        ProfileBox.SelectedItem = config.Profiles.Find(p => p.Id != config.ActiveProfile.Id) ?? config.ActiveProfile;
 
         Title = existing == null ? "Nové tlačidlo" : "Upraviť tlačidlo";
         DeleteButton.Visibility = existing == null ? Visibility.Collapsed : Visibility.Visible;
@@ -77,6 +79,10 @@ public partial class ButtonEditorWindow : Window
                 ObsSceneBox.Text = ob.Scene ?? "";
                 ObsSourceBox.Text = ob.Source ?? "";
                 SelectActionType("obs");
+                break;
+            case ProfileAction pa:
+                ProfileBox.SelectedItem = config.FindProfile(pa.ProfileId) ?? ProfileBox.SelectedItem;
+                SelectActionType("profile");
                 break;
             case OpenAction o:
                 SelectActionType("open");
@@ -126,12 +132,13 @@ public partial class ButtonEditorWindow : Window
     private void UpdateActionPanels()
     {
         // SelectionChanged can fire during InitializeComponent, before the panels exist.
-        if (OpenPanel == null || KeysPanel == null || MediaPanel == null || ObsPanel == null) return;
+        if (OpenPanel == null || KeysPanel == null || MediaPanel == null || ObsPanel == null || ProfilePanel == null) return;
         var type = SelectedActionType;
         OpenPanel.Visibility = type == "open" ? Visibility.Visible : Visibility.Collapsed;
         KeysPanel.Visibility = type == "keys" ? Visibility.Visible : Visibility.Collapsed;
         MediaPanel.Visibility = type == "media" ? Visibility.Visible : Visibility.Collapsed;
         ObsPanel.Visibility = type == "obs" ? Visibility.Visible : Visibility.Collapsed;
+        ProfilePanel.Visibility = type == "profile" ? Visibility.Visible : Visibility.Collapsed;
 
         if (type == "obs")
         {
@@ -358,6 +365,15 @@ public partial class ButtonEditorWindow : Window
                 action = new KeysAction { Keys = keys.ToString() };
                 break;
 
+            case "profile":
+                if (ProfileBox.SelectedItem is not DeckProfile targetProfile)
+                {
+                    Warn("Vyber profil, na ktorý sa má prepnúť.");
+                    return;
+                }
+                action = new ProfileAction { ProfileId = targetProfile.Id };
+                break;
+
             case "obs":
                 var obsCmd = SelectedObsCommand;
                 var scene = ObsSceneBox.Text.Trim();
@@ -419,7 +435,9 @@ public partial class ButtonEditorWindow : Window
             Id = _existing?.Id ?? DeckButton.NewId(),
             Row = _row,
             Col = _col,
-            Label = string.IsNullOrWhiteSpace(LabelBox.Text) ? DefaultLabel(action) : LabelBox.Text.Trim(),
+            Label = string.IsNullOrWhiteSpace(LabelBox.Text)
+                ? (action is ProfileAction pAct ? _config.FindProfile(pAct.ProfileId)?.Name : DefaultLabel(action))
+                : LabelBox.Text.Trim(),
             Icon = _icon,
             Hotkey = hotkey?.ToString(),
             Action = action,

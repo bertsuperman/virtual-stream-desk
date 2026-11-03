@@ -9,14 +9,29 @@ Jednoduchý virtuálny streamdeck pre Windows 10/11. Malé okno s mriežkou tla�
 | Upraviť / vymazať | pravý klik na tlačidlo |
 | Presunúť | ťahaj tlačidlo na iné políčko (obsadené políčka sa vymenia) |
 | Presunúť okno | ťahaj za horný pruh |
-| Nastavenia | ozubené koliesko v hornom pruhu alebo ikona v lište (tray); karty Všeobecné / Rozloženie / OBS |
+| Nastavenia | ozubené koliesko v hornom pruhu alebo ikona v lište (tray); karty Všeobecné / Rozloženie / Profily / Mobil / OBS |
+| Prepnúť profil | názov profilu vľavo v hornom pruhu |
 | Minimalizovať | `–` v hornom pruhu, okno sa schová na panel úloh |
-| Zavrieť do lišty | `×` v hornom pruhu, appka beží ďalej (hotkeys fungujú); späť klikom na ikonu v lište |
-| Ukončiť | pravý klik na ikonu v lište → Ukončiť |
+| Schovať do lišty | klik na ikonu v lište (appka beží ďalej, hotkeys fungujú) |
+| Ukončiť | `×` v hornom pruhu (s potvrdením) alebo pravý klik na ikonu v lište → Ukončiť |
 
 Keď spustíš novšiu verziu, kým stará beží v lište, nová ju sama ukončí a nahradí. Verziu nájdeš v Nastavenia → Všeobecné.
 
 Akcie: **Otvoriť** (program / súbor / priečinok / web), **Klávesová skratka** (pošle sa do aktívneho okna), **Médiá** (play/pauza, ďalšia, predošlá, stop, hlasitosť, mute), **OBS Studio** (viď nižšie).
+
+## Profily
+Každý profil má vlastnú mriežku (riadky × stĺpce) a vlastné tlačidlá. Veľkosť tlačidiel, medzery a popisky sú spoločné.
+- **Nastavenia → Profily:** nový, duplikovať, premenovať, vymazať, prepnúť (aj dvojklikom)
+- prepínanie: názov profilu v hornom pruhu, výber v mobile, alebo tlačidlo s akciou **Prepnúť profil** (ako priečinky na skutočnom Stream Decku)
+- globálne klávesové skratky patria k profilu, ten istý kláves môže v každom profile robiť niečo iné
+- staré konfigurácie sa pri prvom spustení presunú do profilu „Hlavný“
+
+## Ovládanie z mobilu
+1. **Nastavenia → Mobil** → zaškrtni *Povoliť ovládanie z mobilu*.
+2. Naskenuj QR kód fotoaparátom mobilu. Otvorí sa stránka s tvojou mriežkou, ťuknutie stlačí tlačidlo na PC.
+3. Pre celú obrazovku daj v prehliadači *Pridať na plochu* (alebo ⛶ vpravo hore).
+
+Mobil musí byť v rovnakej Wi-Fi. Pri prvom zapnutí sa Windows môže opýtať na prístup do siete, povoľ súkromné siete. QR kód obsahuje tajný kľúč, bez neho sa nikto iný v sieti nepripojí. *Nový kód* všetky mobily odpojí. Server beží na porte 8765 (dá sa zmeniť) a nepoužíva HTTPS, je určený len do domácej siete.
 
 ## OBS Studio
 Ovládanie cez WebSocket server, ktorý má OBS 28+ zabudovaný, takže netreba žiadny plugin.

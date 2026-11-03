@@ -82,6 +82,7 @@
             <ComboBoxItem Tag="keys" Content="Stlačiť klávesovú skratku" />
             <ComboBoxItem Tag="media" Content="Médiá a hlasitosť" />
             <ComboBoxItem Tag="obs" Content="OBS Studio" />
+            <ComboBoxItem Tag="profile" Content="Prepnúť profil" />
         </ComboBox>
 
         <!-- Action details -->
@@ -104,6 +105,12 @@
 
             <StackPanel x:Name="MediaPanel" Visibility="Collapsed">
                 <ComboBox x:Name="MediaBox" HorizontalAlignment="Stretch" />
+            </StackPanel>
+
+            <StackPanel x:Name="ProfilePanel" Visibility="Collapsed">
+                <ComboBox x:Name="ProfileBox" HorizontalAlignment="Stretch" DisplayMemberPath="Name" />
+                <TextBlock Style="{StaticResource Hint}"
+                           Text="Ako priečinok na Stream Decku: v cieľovom profile si daj tlačidlo späť. Nové profily vytvoríš v Nastavenia → Profily." />
             </StackPanel>
 
             <StackPanel x:Name="ObsPanel" Visibility="Collapsed">

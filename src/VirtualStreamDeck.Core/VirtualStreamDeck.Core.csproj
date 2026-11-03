@@ -8,6 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The phone web app, served by Remote/RemoteServer. Resource names: VirtualStreamDeck.Core.Remote.web.<file> -->
+    <EmbeddedResource Include="Remote\web\*" LogicalName="VirtualStreamDeck.Core.Remote.web.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="VirtualStreamDeck.Core.Tests" />
   </ItemGroup>
 

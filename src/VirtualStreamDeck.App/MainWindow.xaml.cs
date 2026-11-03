@@ -13,6 +13,7 @@ using System.Windows.Media.Animation;
 using VirtualStreamDeck.App.Services;
 using VirtualStreamDeck.Core;
 using VirtualStreamDeck.Core.Obs;
+using VirtualStreamDeck.Core.Remote;
 
 namespace VirtualStreamDeck.App;
 
@@ -28,10 +29,10 @@ public partial class MainWindow : Window
     private static readonly Brush EmptyGlyphBrush = Frozen(0x5A, 0x5A, 0x63);
     private static readonly Brush AccentBrush = Frozen(0x4C, 0x8D, 0xFF);
     private static readonly Brush ErrorBrush = Frozen(0xE5, 0x48, 0x4D);
-    private static readonly Brush HeaderTextBrush = Frozen(0x5F, 0x5F, 0x68);
 
     private readonly Deck _deck;
     private readonly ObsClient _obs;
+    private readonly RemoteServer _remote;
     private readonly IconService _icons;
     private readonly Dictionary<string, Border> _tiles = new();
     private HotkeyService? _hotkeys;
@@ -49,11 +50,12 @@ public partial class MainWindow : Window
 
     private int _statusVersion;
 
-    internal MainWindow(Deck deck, ObsClient obs)
+    internal MainWindow(Deck deck, ObsClient obs, RemoteServer remote)
     {
         InitializeComponent();
         _deck = deck;
         _obs = obs;
+        _remote = remote;
         _icons = new IconService(deck.Store);
 
         var pos = deck.Config.Settings.Window;
@@ -63,7 +65,12 @@ public partial class MainWindow : Window
             Top = pos.Y;
         }
 
-        deck.Changed += (_, _) => Rebuild();
+        // A profile switch from the phone arrives on a background thread.
+        deck.Changed += (_, _) =>
+        {
+            if (Dispatcher.CheckAccess()) Rebuild();
+            else Dispatcher.InvokeAsync(Rebuild);
+        };
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         SizeChanged += (_, _) => KeepOnScreen();
@@ -152,18 +159,20 @@ public partial class MainWindow : Window
     {
         var config = _deck.Config;
         var s = config.Settings;
+        int rows = config.Rows, columns = config.Columns;
 
         Topmost = s.AlwaysOnTop;
-        DeckGrid.Rows = s.Rows;
-        DeckGrid.Columns = s.Columns;
+        ProfileNameText.Text = config.ActiveProfile.Name;
+        DeckGrid.Rows = rows;
+        DeckGrid.Columns = columns;
         DeckGrid.Children.Clear();
         _tiles.Clear();
 
         _hotkeys?.Apply(config);
 
-        for (int r = 0; r < s.Rows; r++)
+        for (int r = 0; r < rows; r++)
         {
-            for (int c = 0; c < s.Columns; c++)
+            for (int c = 0; c < columns; c++)
             {
                 var button = config.GetAt(r, c);
                 var tile = CreateTile(r, c, button);
@@ -375,6 +384,7 @@ public partial class MainWindow : Window
             MediaCommand.Mute => "\uE74F",
             _ => "\uE767",
         },
+        ProfileAction => "\uE81E",                                                // Layers
         ObsAction o => o.Command switch
         {
             ObsCommand.SwitchScene => "\uE7F4",   // TV monitor
@@ -402,7 +412,9 @@ public partial class MainWindow : Window
 
         var lines = new List<string>();
         if (!string.IsNullOrWhiteSpace(b.Label)) lines.Add(b.Label!);
-        lines.Add(DescribeAction(b.Action));
+        lines.Add(b.Action is ProfileAction pa
+            ? $"Prepnúť na profil „{_deck.Config.FindProfile(pa.ProfileId)?.Name ?? "?"}“"
+            : DescribeAction(b.Action));
         if (!string.IsNullOrWhiteSpace(b.Hotkey))
         {
             bool failed = _hotkeys?.Failed.Contains(b.Id) == true;
@@ -416,6 +428,7 @@ public partial class MainWindow : Window
     {
         OpenAction o => "Otvoriť: " + o.Target,
         KeysAction k => "Poslať skratku: " + k.Keys,
+        ProfileAction => "Prepnúť profil",
         MediaAction m => MediaName(m.Command),
         ObsAction o => "OBS: " + ObsName(o.Command) + o.Command switch
         {
@@ -501,8 +514,7 @@ public partial class MainWindow : Window
         HeaderText.ToolTip = text;
         await Task.Delay(isError ? 6000 : 3500);
         if (version != _statusVersion) return;
-        HeaderText.Text = "STREAM DECK";
-        HeaderText.Foreground = HeaderTextBrush;
+        HeaderText.Text = "";
         HeaderText.ToolTip = null;
     }
 
@@ -655,14 +667,56 @@ public partial class MainWindow : Window
         }
     }
 
-    public void OpenSettings()
+    /// <summary>Called when a phone presses a button, so you can see it happen on the PC too.</summary>
+    public void FlashButton(string buttonId)
+    {
+        if (_tiles.TryGetValue(buttonId, out var tile)) Pulse(tile);
+    }
+
+    // ───────────────────────── profiles ─────────────────────────
+
+    private void ProfileButton_Click(object sender, RoutedEventArgs e)
+    {
+        var config = _deck.Config;
+        var menu = new ContextMenu { PlacementTarget = ProfileButton, Placement = PlacementMode.Bottom };
+        foreach (var profile in config.Profiles)
+        {
+            var id = profile.Id;
+            var item = new MenuItem
+            {
+                Header = profile.Name,
+                IsCheckable = true,
+                IsChecked = id == config.ActiveProfile.Id,
+            };
+            item.Click += (_, _) => _deck.SwitchProfile(id);
+            menu.Items.Add(item);
+        }
+        menu.Items.Add(new Separator());
+        var manage = new MenuItem { Header = "Spravovať profily…" };
+        manage.Click += (_, _) => OpenSettings(SettingsWindow.ProfilesTab);
+        menu.Items.Add(manage);
+        menu.IsOpen = true;
+    }
+
+    // ───────────────────────── quitting ─────────────────────────
+
+    private void Close_Click(object sender, RoutedEventArgs e)
+    {
+        var answer = MessageBox.Show(this,
+            "Naozaj ukončiť Virtual Stream Deck?\n\nKlávesové skratky aj ovládanie z mobilu prestanú fungovať.\n" +
+            "Ak chceš okno len schovať, použi – (minimalizovať) alebo klikni na ikonu v lište.",
+            "Ukončiť Stream Deck", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+        if (answer == MessageBoxResult.Yes) ((App)Application.Current).ExitApp();
+    }
+
+    public void OpenSettings(string? tab = null)
     {
         if (_dialogOpen) return;
         ShowDeck();
         _dialogOpen = true;
         try
         {
-            new SettingsWindow(_deck, _obs) { Owner = this }.ShowDialog();
+            new SettingsWindow(_deck, _obs, _remote, tab) { Owner = this }.ShowDialog();
         }
         finally
         {
@@ -673,7 +727,6 @@ public partial class MainWindow : Window
 
     private void Settings_Click(object sender, RoutedEventArgs e) => OpenSettings();
 
-    private void Hide_Click(object sender, RoutedEventArgs e) => Hide();
 
     // ───────────────────────── moving the window ─────────────────────────
 
