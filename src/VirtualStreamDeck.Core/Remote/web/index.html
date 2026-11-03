@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Stream Deck">
-<link rel="manifest" href="/manifest.webmanifest">
+<link rel="manifest" id="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/app.png">
 <link rel="apple-touch-icon" href="/app.png">
 <title>Stream Deck</title>
@@ -129,14 +129,22 @@
   const $ = id => document.getElementById(id);
   const grid = $("grid"), dot = $("dot"), profileSel = $("profile"), pname = $("pname");
 
-  // The token comes from the QR code (?t=…). Remember it and remove it from the address bar.
+  // The token comes from the QR code (?t=…). It stays in the address and in the manifest's start_url,
+  // because "Add to Home Screen" saves that address. On iPhone the home-screen app has its own storage,
+  // so without the token in the address it would ask for the QR code again.
   const params = new URLSearchParams(location.search);
-  if (params.get("t")) {
-    try { localStorage.setItem("vsd-token", params.get("t")); } catch (e) {}
-    history.replaceState(null, "", location.pathname);
-  }
   let token = params.get("t");
-  try { token = token || localStorage.getItem("vsd-token"); } catch (e) {}
+  try {
+    if (token) localStorage.setItem("vsd-token", token);
+    else token = localStorage.getItem("vsd-token");
+  } catch (e) {}
+  function keepToken() {
+    if (!token) return;
+    const url = "/?t=" + encodeURIComponent(token);
+    if (location.pathname + location.search !== url) history.replaceState(null, "", url);
+    $("manifest").href = "/manifest.webmanifest?t=" + encodeURIComponent(token);
+  }
+  keepToken();
 
   let ws = null, deck = null, seq = 0, retry = 0, retryTimer = null;
   const pending = new Map();
@@ -157,6 +165,14 @@
   // ───────── "add to home screen" = full screen ─────────
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
   const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  // A home-screen icon can't receive a scanned QR code (the camera opens the browser).
+  function reAddText() {
+    return T("Táto ikona na ploche nemá platný kód. Odstráň ju, naskenuj QR kód zo Stream Decku (Nastavenia → Mobil), " +
+             "v prehliadači daj Pridať na plochu a otváraj deck z novej ikony.",
+             "This home-screen icon has no valid code. Remove it, scan the QR code from Stream Deck (Settings → Phone), " +
+             "choose Add to Home Screen in the browser and open the deck from the new icon.");
+  }
+
   function hintHtml() {
     return ios
       ? T("Pre celú obrazovku si daj deck na plochu: <b>Zdieľať ⬆︎ → Pridať na plochu</b> a otváraj ho odtiaľ.",
@@ -199,7 +215,7 @@
   async function connect() {
     clearTimeout(retryTimer);
     if (!token) {
-      overlay(T("Naskenuj QR kód", "Scan the QR code"),
+      overlay(T("Naskenuj QR kód", "Scan the QR code"), standalone ? reAddText() :
         T("Otvor na PC Stream Deck → Nastavenia → Mobil a naskenuj QR kód.", "On the PC open Stream Deck → Settings → Phone and scan the QR code."));
       return;
     }
@@ -208,7 +224,7 @@
       const r = await fetch("/api/ping?t=" + encodeURIComponent(token), { cache: "no-store" });
       if (r.status === 401) {
         setStatus("off");
-        overlay(T("Neplatný QR kód", "Invalid QR code"),
+        overlay(T("Neplatný QR kód", "Invalid QR code"), standalone ? reAddText() :
           T("Kód bol medzitým zmenený. Naskenuj nový v Stream Decku → Nastavenia → Mobil.", "The code has been changed. Scan the new one in Stream Deck → Settings → Phone."));
         return;
       }

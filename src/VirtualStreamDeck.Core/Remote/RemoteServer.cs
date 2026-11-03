@@ -153,7 +153,7 @@ public sealed partial class RemoteServer : IDisposable
                     await RespondAsync(stream, 200, "image/png", Asset("app.png"), cache: true);
                     break;
                 case "/manifest.webmanifest":
-                    await RespondAsync(stream, 200, "application/manifest+json", Asset("manifest.webmanifest"));
+                    await RespondAsync(stream, 200, "application/manifest+json", Manifest(request));
                     break;
                 case "/api/ping":
                     await RespondAsync(stream, Authorized(request) ? 200 : 401, "application/json", "{}"u8.ToArray());
@@ -234,6 +234,18 @@ public sealed partial class RemoteServer : IDisposable
             if (colon > 0) headers[line[..colon].Trim()] = line[(colon + 1)..].Trim();
         }
         return new Request(parts[0], path, query, headers);
+    }
+
+    /// <summary>
+    /// With a valid token the home-screen icon starts at "/?t=…": an app added to the home screen
+    /// (on iPhone it doesn't share storage with Safari) then connects without scanning again.
+    /// </summary>
+    private byte[] Manifest(Request request)
+    {
+        var json = Encoding.UTF8.GetString(Asset("manifest.webmanifest"));
+        if (Authorized(request))
+            json = json.Replace("\"start_url\": \"/\"", $"\"start_url\": \"/?t={Uri.EscapeDataString(request.Query["t"])}\"");
+        return Encoding.UTF8.GetBytes(json);
     }
 
     private bool Authorized(Request request)

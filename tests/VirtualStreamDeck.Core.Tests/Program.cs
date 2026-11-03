@@ -414,6 +414,10 @@ static class Tests
         Assert.True(html.Contains("<title>Stream Deck</title>"), "app served without token");
         Assert.Equal(200, (int)(await http.GetAsync("/app.png")).StatusCode, "app icon");
         Assert.Equal(200, (int)(await http.GetAsync("/manifest.webmanifest")).StatusCode, "manifest");
+        Assert.True((await http.GetStringAsync("/manifest.webmanifest")).Contains("\"start_url\": \"/\""), "manifest without token");
+        Assert.True((await http.GetStringAsync("/manifest.webmanifest?t=wrong")).Contains("\"start_url\": \"/\""), "wrong token not echoed");
+        Assert.True((await http.GetStringAsync("/manifest.webmanifest?t=" + env.Token)).Contains($"\"start_url\": \"/?t={env.Token}\""),
+            "home-screen icon starts with the token");
         Assert.Equal(401, (int)(await http.GetAsync("/api/ping")).StatusCode, "no token");
         Assert.Equal(401, (int)(await http.GetAsync("/api/ping?t=wrong")).StatusCode, "wrong token");
         Assert.Equal(200, (int)(await http.GetAsync("/api/ping?t=" + env.Token)).StatusCode, "token ok");
