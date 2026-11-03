@@ -86,6 +86,7 @@ public partial class App : Application
         deck.Update(c =>
         {
             c.Settings.Language = L.Code(language.Value);
+            c.TranslateDefaults(language.Value); // e.g. an existing "Hlavný" profile when English is picked
             if (firstStart)
             {
                 c.ActiveProfile.Name = DeckConfig.DefaultProfileName; // in the chosen language

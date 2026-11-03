@@ -712,6 +712,28 @@ static class Tests
         }
     }
 
+    public static void Language_DefaultNamesFollowTheLanguage()
+    {
+        var c = new DeckConfig();
+        c.Normalize(); // "Hlavný"
+        DeckConfig.AddMediaButtons(c.ActiveProfile);
+        c.AddMediaProfile(); // "Zvuk"
+        c.AddMediaProfile(); // "Zvuk 2"
+        c.AddProfile("Hlavný (kópia)");
+        c.AddProfile("Moje hry");
+        c.ActiveProfile.Buttons.Add(new DeckButton { Row = 1, Label = "Stlmiť", Action = new KeysAction { Keys = "Ctrl+M" } });
+
+        c.TranslateDefaults(AppLanguage.En);
+        Assert.Equal("Main,Sound,Sound 2,Main (copy),Moje hry", string.Join(",", c.Profiles.Select(p => p.Name)), "profiles in English");
+        Assert.Equal("Play / pause,Next,Volume down,Volume up,Mute", string.Join(",",
+            c.Profiles[0].Buttons.Where(b => b.Action is MediaAction).Select(b => b.Label)), "starter labels in English");
+        Assert.Equal("Stlmiť", c.Profiles[0].Buttons.Single(b => b.Action is KeysAction).Label, "own button with the same text untouched");
+
+        c.TranslateDefaults(AppLanguage.Sk);
+        Assert.Equal("Hlavný,Zvuk,Zvuk 2,Hlavný (kópia),Moje hry", string.Join(",", c.Profiles.Select(p => p.Name)), "back to Slovak");
+        Assert.Equal("Tichšie", c.Profiles[1].Buttons[2].Label, "labels back to Slovak");
+    }
+
     public static void Starter_MediaButtonsInFirstRow()
     {
         var c = new DeckConfig();

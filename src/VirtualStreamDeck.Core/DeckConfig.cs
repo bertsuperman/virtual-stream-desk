@@ -104,18 +104,69 @@ public sealed class DeckConfig
     /// Volume and playback buttons in the first row, the first thing a new deck shows.
     /// Cells that are already taken are skipped.
     /// </summary>
+    private static readonly (MediaCommand Command, string Sk, string En)[] StarterButtons =
+    {
+        (MediaCommand.PlayPause, "Play / pauza", "Play / pause"),
+        (MediaCommand.Next, "Ďalšia", "Next"),
+        (MediaCommand.VolumeDown, "Tichšie", "Volume down"),
+        (MediaCommand.VolumeUp, "Hlasnejšie", "Volume up"),
+        (MediaCommand.Mute, "Stlmiť", "Mute"),
+    };
+
+    /// <summary>Names the app gives by itself; they follow the language, names the user typed don't.</summary>
+    private static readonly (string Sk, string En)[] DefaultProfileNames =
+    {
+        ("Hlavný", "Main"),
+        ("Zvuk", "Sound"),
+        ("Nový profil", "New profile"),
+    };
+
+    /// <summary>
+    /// After a language switch: profile names and button labels that the app created itself
+    /// ("Hlavný", "Zvuk 2", "Play / pauza", "… (kópia)") are renamed to the other language.
+    /// </summary>
+    public void TranslateDefaults(AppLanguage to)
+    {
+        string Pick((string Sk, string En) p) => to == AppLanguage.En ? p.En : p.Sk;
+        foreach (var profile in Profiles)
+        {
+            var name = profile.Name;
+            string copySuffix = "";
+            foreach (var suffix in new[] { " (kópia)", " (copy)" })
+            {
+                if (!name.EndsWith(suffix, StringComparison.Ordinal)) continue;
+                name = name[..^suffix.Length];
+                copySuffix = to == AppLanguage.En ? " (copy)" : " (kópia)";
+                break;
+            }
+            foreach (var pair in DefaultProfileNames)
+            {
+                foreach (var source in new[] { pair.Sk, pair.En })
+                {
+                    if (name == source) name = Pick(pair);
+                    else if (name.StartsWith(source + " ", StringComparison.Ordinal) && int.TryParse(name[(source.Length + 1)..], out int n))
+                        name = $"{Pick(pair)} {n}";
+                    else continue;
+                    goto renamed;
+                }
+            }
+            renamed:
+            profile.Name = name + copySuffix;
+
+            foreach (var button in profile.Buttons)
+            {
+                if (button.Action is not MediaAction media) continue;
+                foreach (var (command, sk, en) in StarterButtons)
+                    if (media.Command == command && (button.Label == sk || button.Label == en))
+                        button.Label = to == AppLanguage.En ? en : sk;
+            }
+        }
+    }
+
     public static void AddMediaButtons(DeckProfile profile)
     {
-        var buttons = new (MediaCommand Command, string Sk, string En)[]
-        {
-            (MediaCommand.PlayPause, "Play / pauza", "Play / pause"),
-            (MediaCommand.Next, "Ďalšia", "Next"),
-            (MediaCommand.VolumeDown, "Tichšie", "Volume down"),
-            (MediaCommand.VolumeUp, "Hlasnejšie", "Volume up"),
-            (MediaCommand.Mute, "Stlmiť", "Mute"),
-        };
         int col = 0;
-        foreach (var (command, sk, en) in buttons)
+        foreach (var (command, sk, en) in StarterButtons)
         {
             while (profile.Buttons.Any(b => b.Row == 0 && b.Col == col)) col++;
             profile.Buttons.Add(new DeckButton

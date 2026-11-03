@@ -14,6 +14,9 @@
 <title>Stream Deck</title>
 <style>
   :root {
+    /* Safe areas of the screen (notch, status bar, home indicator, Android navigation bar). */
+    --sat: env(safe-area-inset-top, 0px); --sar: env(safe-area-inset-right, 0px);
+    --sab: env(safe-area-inset-bottom, 0px); --sal: env(safe-area-inset-left, 0px);
     --bg: #17171a; --tile: #26262c; --tile-hi: #34343c; --text: #e6e6eb; --muted: #8a8a94;
     --accent: #4c8dff; --error: #e5484d; --ok: #46c46e; --gap: 10px; --size: 80px;
   }
@@ -25,18 +28,25 @@
   }
   body { overflow: hidden; }
   /* The whole app lives in #app. Held upright, it is rotated 90° so the deck is always landscape. */
+  /* --in-*: the safe areas as seen from inside #app (its own top/right/bottom/left). */
   #app {
     position: fixed; left: 0; top: 0; width: var(--app-w, 100vw); height: var(--app-h, 100vh);
     display: flex; flex-direction: row; overflow: hidden;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    --in-top: var(--sat); --in-right: var(--sar); --in-bottom: var(--sab); --in-left: var(--sal);
   }
-  body.rotated #app { transform-origin: 0 0; transform: translateX(var(--vw)) rotate(90deg); padding: 0; }
+  /* Rotated 90° clockwise: the app's left edge is the screen's top (status bar / notch),
+     its bottom is the screen's left, its right is the screen's bottom (home indicator). */
+  body.rotated #app {
+    transform-origin: 0 0; transform: translateX(var(--vw)) rotate(90deg);
+    --in-top: var(--sar); --in-right: var(--sab); --in-bottom: var(--sal); --in-left: var(--sat);
+  }
   /* Rail on the left, like the PC app: connection, profile, rotate, full screen */
   #rail {
-    width: 64px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0 10px;
+    width: calc(64px + var(--in-left)); flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: calc(12px + var(--in-top)) 0 calc(10px + var(--in-bottom)) var(--in-left); /* the rail colour reaches the edge */
     background: #1c1c21; border-right: 1px solid #2a2a30;
   }
-  .content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .content { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: var(--in-top) var(--in-right) var(--in-bottom) 0; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; transition: background .2s; }
   .dot.on { background: var(--ok); }
   .dot.off { background: var(--error); }
@@ -87,7 +97,8 @@
   .tile .label.big { white-space: normal; font-weight: 600; font-size: max(11px, calc(var(--size) * .16)); margin: 0; line-height: 1.15;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
   #overlay {
-    position: fixed; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 32px;
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center; text-align: center;
+    padding: calc(24px + var(--sat)) calc(24px + var(--sar)) calc(24px + var(--sab)) calc(24px + var(--sal));
     background: rgba(23,23,26,.92); z-index: 10; flex-direction: column; gap: 12px;
   }
   #overlay.show { display: flex; }
@@ -101,7 +112,7 @@
   }
   #ov-connect { font: inherit; font-weight: 600; padding: 10px 22px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; }
   #toast {
-    position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translate(-50%, 40px); opacity: 0;
+    position: fixed; left: 50%; bottom: calc(20px + var(--in-bottom)); transform: translate(-50%, 40px); opacity: 0;
     background: #3a1d1f; color: #ffd7d8; border: 1px solid var(--error); padding: 10px 14px; border-radius: 12px; max-width: 90vw;
     transition: transform .2s, opacity .2s; z-index: 20; pointer-events: none;
   }

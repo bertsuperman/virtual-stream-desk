@@ -92,7 +92,11 @@ public partial class SettingsPanel : UserControl
             if (_loading || (LanguageBox.SelectedItem as ComboBoxItem)?.Tag is not string code) return;
             var language = L.Parse(code) ?? AppLanguage.Sk;
             L.Set(language); // every window re-reads its texts
-            _deck.Update(c => c.Settings.Language = L.Code(language)); // phones get the new language too
+            _deck.Update(c =>
+            {
+                c.Settings.Language = L.Code(language);
+                c.TranslateDefaults(language); // "Hlavný" → "Main", starter button labels…
+            }); // phones get the new language too
         };
         L.Changed += () =>
         {
